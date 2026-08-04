@@ -22,6 +22,15 @@ export const POINT_COLOR_PRESETS = [
 
 export type DayDisplayMode = 'icon' | 'icon-text' | 'text';
 export type ScheduleViewMode = 'week' | 'month';
+export type CategoryIconKey = 'person' | 'briefcase' | 'medical' | 'pencil' | 'home' | 'tag';
+export type CategoryMeta = { color: string; icon: CategoryIconKey };
+export type Routine = { id: string; title: string; category: string; priority: 'high' | 'medium' | 'low'; time: string | null; repeat: 'daily' | 'weekly' | 'interval'; weekdays: number[]; intervalDays: number; startDate: string };
+
+const DEFAULT_CATEGORY_META: Record<string, CategoryMeta> = {
+  '업무': { color: '#2170D8', icon: 'briefcase' }, '개인': { color: '#9333CC', icon: 'person' },
+  '건강': { color: '#2F9E44', icon: 'medical' }, '학습': { color: '#F5862A', icon: 'pencil' },
+  '가정': { color: '#D6357F', icon: 'home' }, '기타': { color: '#6B6B6B', icon: 'tag' },
+};
 
 export const MIN_WEEK_VISIBLE_DAYS = 3;
 export const MAX_WEEK_VISIBLE_DAYS = 7;
@@ -33,6 +42,8 @@ interface Settings {
   dayDisplayMode: DayDisplayMode;
   weekVisibleDays: number;
   scheduleViewMode: ScheduleViewMode;
+  categoryMeta: Record<string, CategoryMeta>;
+  routines: Routine[];
 }
 
 function loadSettings(): Settings {
@@ -52,13 +63,15 @@ function loadSettings(): Settings {
             && parsed.weekVisibleDays >= MIN_WEEK_VISIBLE_DAYS && parsed.weekVisibleDays <= MAX_WEEK_VISIBLE_DAYS
             ? parsed.weekVisibleDays : 7,
           scheduleViewMode: parsed.scheduleViewMode === 'month' ? 'month' : 'week',
+          categoryMeta: parsed.categoryMeta ?? DEFAULT_CATEGORY_META,
+          routines: Array.isArray(parsed.routines) ? parsed.routines : [],
         };
       }
     } catch {}
   }
   return {
     onboardingDone: false, pointColor: DEFAULT_POINT_COLOR, categories: DEFAULT_CATEGORIES,
-    dayDisplayMode: 'icon', weekVisibleDays: 7, scheduleViewMode: 'week',
+    dayDisplayMode: 'icon', weekVisibleDays: 7, scheduleViewMode: 'week', categoryMeta: DEFAULT_CATEGORY_META, routines: [],
   };
 }
 
@@ -77,6 +90,9 @@ interface SettingsState extends Settings {
   setDayDisplayMode:  (mode: DayDisplayMode) => void;
   setWeekVisibleDays: (days: number) => void;
   setScheduleViewMode: (mode: ScheduleViewMode) => void;
+  updateCategory: (previous: string, next: string, meta: CategoryMeta) => void;
+  addRoutine: (routine: Omit<Routine, 'id'>) => void;
+  removeRoutine: (id: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -103,13 +119,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   addCategory(name) {
     const trimmed = name.trim();
     if (!trimmed || get().categories.includes(trimmed)) return;
-    const next: Settings = { ...get(), categories: [...get().categories, trimmed] };
+    const next: Settings = {
+      ...get(), categories: [...get().categories, trimmed],
+      categoryMeta: { ...get().categoryMeta, [trimmed]: { color: '#6B6B6B', icon: 'tag' } },
+    };
     saveSettings(next);
     set(next);
   },
 
   removeCategory(name) {
-    const next: Settings = { ...get(), categories: get().categories.filter((c) => c !== name) };
+    const categoryMeta = { ...get().categoryMeta }; delete categoryMeta[name];
+    const next: Settings = { ...get(), categories: get().categories.filter((c) => c !== name), categoryMeta };
     saveSettings(next);
     set(next);
   },
@@ -131,5 +151,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const next: Settings = { ...get(), scheduleViewMode: mode };
     saveSettings(next);
     set(next);
+  },
+
+  updateCategory(previous, next, meta) {
+    const name = next.trim();
+    if (!name || (name !== previous && get().categories.includes(name))) return;
+    const categories = get().categories.map((c) => c === previous ? name : c);
+    const categoryMeta = { ...get().categoryMeta, [name]: meta };
+    if (name !== previous) delete categoryMeta[previous];
+    const nextState: Settings = { ...get(), categories, categoryMeta };
+    saveSettings(nextState); set(nextState);
+  },
+
+  addRoutine(routine) {
+    const next: Settings = { ...get(), routines: [...get().routines, { ...routine, id: String(Date.now()) }] };
+    saveSettings(next); set(next);
+  },
+  removeRoutine(id) {
+    const next: Settings = { ...get(), routines: get().routines.filter((routine) => routine.id !== id) };
+    saveSettings(next); set(next);
   },
 }));

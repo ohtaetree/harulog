@@ -6,7 +6,7 @@ import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMissionStore } from '../stores/missionStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { Priority, MissionRow } from '../db/missionDb';
+import { Priority, MissionRow, addMission, getMissions } from '../db/missionDb';
 import DateDropdown, { DateDropdownHandle } from '../components/DateDropdown';
 import TimePickerModal from '../components/TimePickerModal';
 import WeekTimeGridView, { WeekTimeGridHandle } from '../components/WeekTimeGridView';
@@ -197,6 +197,7 @@ export default function MissionScreen() {
   const { date, missions, loadDate, add, update, toggle, remove } = useMissionStore();
   const pointColor = usePointColor();
   const categories = useSettingsStore((s) => s.categories);
+  const routines = useSettingsStore((s) => s.routines);
   const weekVisibleDays = useSettingsStore((s) => s.weekVisibleDays);
   const viewMode = useSettingsStore((s) => s.scheduleViewMode);
   const setViewMode = useSettingsStore((s) => s.setScheduleViewMode);
@@ -210,6 +211,21 @@ export default function MissionScreen() {
   const [pendingRange, setPendingRange] = useState<{ date: string; startTime: string; endTime: string } | null>(null);
 
   useEffect(() => { loadDate(todayStr()); }, []);
+  useEffect(() => {
+    const day = new Date(date + 'T00:00:00');
+    const weekday = (day.getDay() + 6) % 7;
+    const existing = getMissions(date);
+    let added = false;
+    routines.forEach((routine) => {
+      const start = new Date(routine.startDate + 'T00:00:00');
+      const diff = Math.floor((day.getTime() - start.getTime()) / 86400000);
+      const due = diff >= 0 && (routine.repeat === 'daily' || (routine.repeat === 'weekly' && routine.weekdays.includes(weekday)) || (routine.repeat === 'interval' && diff % routine.intervalDays === 0));
+      if (due && !existing.some((m) => m.title === routine.title && m.category === routine.category && m.start_time === routine.time)) {
+        addMission(date, routine.title, routine.priority, routine.category, routine.time, routine.time ? null : null); added = true;
+      }
+    });
+    if (added) loadDate(date);
+  }, [date, routines]);
 
   const { navigate } = useDateFade(loadDate);
 
@@ -327,6 +343,15 @@ export default function MissionScreen() {
     });
   };
 
+  const handleItemResize = (item: MissionRow, edge: 'start' | 'end', deltaMinutes: number) => {
+    if (!item.start_time) return;
+    const start = timeToMinutes(item.start_time);
+    const end = item.end_time ? timeToMinutes(item.end_time) : start + 30;
+    const nextStart = edge === 'start' ? Math.min(start + deltaMinutes, end - 15) : start;
+    const nextEnd = edge === 'end' ? Math.max(end + deltaMinutes, start + 15) : end;
+    update(item.id, item.title, item.priority, item.category, minutesToTimeStr(nextStart), minutesToTimeStr(nextEnd), item.date);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* 헤더: 날짜(좌) / 전환·검색·설정(우) — 날짜 쪽만 좌우 스와이프로 이전/다음 이동
@@ -406,6 +431,7 @@ export default function MissionScreen() {
               onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
               onItemDragUpdate={handleDragUpdate}
               onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
+              onItemResize={handleItemResize}
               draggingId={dragItem?.id ?? null}
               dropPreview={dropPreview}
             />

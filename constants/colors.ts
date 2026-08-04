@@ -1,8 +1,8 @@
 export const Colors = {
   // Base — black & white
   background: '#FFFFFF',
-  surface: '#F4F4F4',
-  border: '#E2E2E2',
+  surface: '#FFFFFF',
+  border: '#E9E9E9',
 
   // Text
   textPrimary: '#111111',

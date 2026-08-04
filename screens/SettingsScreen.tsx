@@ -2,14 +2,14 @@ import { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
-import { useSettingsStore, POINT_COLOR_PRESETS, DayDisplayMode, MIN_WEEK_VISIBLE_DAYS, MAX_WEEK_VISIBLE_DAYS } from '../stores/settingsStore';
+import { useSettingsStore, POINT_COLOR_PRESETS, DayDisplayMode, CategoryIconKey, Routine, MIN_WEEK_VISIBLE_DAYS, MAX_WEEK_VISIBLE_DAYS } from '../stores/settingsStore';
 import { usePointColor } from '../hooks/usePointColor';
 import {
-  IconPalette, IconPerson, IconSliders, IconColumns, IconCheck, IconChevronLeft, IconClose, IconPlus,
+  IconPalette, IconPerson, IconSliders, IconColumns, IconCheck, IconChevronLeft, IconClose, IconPlus, IconBriefcase, IconMedical, IconPencil, IconHome, IconTag, IconRefresh,
 } from '../components/icons';
 import { Divider, SettingRow, ComingSoonSub, SubScreenHeader, styles as s } from '../components/SettingsUI';
 
-type SubScreenKey = 'displayMode' | 'weekDays' | 'theme' | 'pointColor' | 'categories';
+type SubScreenKey = 'displayMode' | 'weekDays' | 'theme' | 'pointColor' | 'categories' | 'routines';
 
 const DISPLAY_MODE_OPTIONS: { key: DayDisplayMode; label: string; desc: string }[] = [
   { key: 'icon', label: '아이콘만 표시', desc: '월간 뷰의 날짜 칸에 카테고리 아이콘만 보여줘요.' },
@@ -113,8 +113,17 @@ function PointColorSub({ onBack }: { onBack: () => void }) {
 function CategoriesSub({ onBack }: { onBack: () => void }) {
   const pointColor = usePointColor();
   const categories = useSettingsStore((st) => st.categories);
-  const { addCategory, removeCategory } = useSettingsStore();
+  const categoryMeta = useSettingsStore((st) => st.categoryMeta);
+  const { addCategory, removeCategory, updateCategory } = useSettingsStore();
   const [input, setInput] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('#6B6B6B');
+  const [editIcon, setEditIcon] = useState<CategoryIconKey>('tag');
+  const ICONS: { key: CategoryIconKey; Icon: any }[] = [
+    { key: 'briefcase', Icon: IconBriefcase }, { key: 'person', Icon: IconPerson }, { key: 'medical', Icon: IconMedical },
+    { key: 'pencil', Icon: IconPencil }, { key: 'home', Icon: IconHome }, { key: 'tag', Icon: IconTag },
+  ];
 
   const handleAdd = () => {
     if (!input.trim()) return;
@@ -133,20 +142,38 @@ function CategoriesSub({ onBack }: { onBack: () => void }) {
 
         <View style={styles.catListWrap}>
           {categories.map((c) => (
-            <View key={c} style={styles.catListRow}>
+            <Pressable key={c} style={styles.catListRow} onPress={() => {
+              const meta = categoryMeta[c] ?? { color: '#6B6B6B', icon: 'tag' as CategoryIconKey };
+              setEditing(c); setEditName(c); setEditColor(meta.color); setEditIcon(meta.icon);
+            }}>
               <View style={styles.catListIconWrap}>
-                <IconPerson size={14} color={Colors.textSecondary} />
+                <IconPerson size={14} color={categoryMeta[c]?.color ?? Colors.textSecondary} />
               </View>
               <Text style={styles.catListLabel}>{c}</Text>
               <Pressable onPress={() => removeCategory(c)} hitSlop={10}>
                 <IconClose size={14} color={Colors.textMuted} />
               </Pressable>
-            </View>
+            </Pressable>
           ))}
           {categories.length === 0 && (
             <Text style={styles.desc}>카테고리가 없어요. 아래에서 추가해보세요.</Text>
           )}
         </View>
+
+        {editing && (
+          <View style={s.card}>
+            <TextInput style={styles.addCatInput} value={editName} onChangeText={setEditName} maxLength={20} />
+            <View style={styles.swatchGrid}>{POINT_COLOR_PRESETS.map((p) => (
+              <Pressable key={p.value} onPress={() => setEditColor(p.value)} style={[styles.editSwatch, { backgroundColor: p.value }, editColor === p.value && styles.editSwatchSelected]} />
+            ))}</View>
+            <View style={styles.iconChoiceRow}>{ICONS.map(({ key, Icon }) => (
+              <Pressable key={key} onPress={() => setEditIcon(key)} style={[styles.iconChoice, editIcon === key && { borderColor: editColor }]}><Icon size={17} color={editColor} /></Pressable>
+            ))}</View>
+            <Pressable style={[styles.saveCategoryBtn, { backgroundColor: editColor }]} onPress={() => { updateCategory(editing, editName, { color: editColor, icon: editIcon }); setEditing(null); }}>
+              <Text style={styles.saveCategoryText}>카테고리 저장</Text>
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.addCatRow}>
           <TextInput
@@ -166,6 +193,23 @@ function CategoriesSub({ onBack }: { onBack: () => void }) {
       </ScrollView>
     </View>
   );
+}
+
+function RoutinesSub({ onBack }: { onBack: () => void }) {
+  const categories = useSettingsStore((s) => s.categories);
+  const routines = useSettingsStore((s) => s.routines);
+  const { addRoutine, removeRoutine } = useSettingsStore();
+  const [title, setTitle] = useState(''); const [time, setTime] = useState('');
+  const [repeat, setRepeat] = useState<Routine['repeat']>('daily');
+  const add = () => { if (!title.trim()) return; addRoutine({ title: title.trim(), category: categories[0] ?? '', priority: 'medium', time: /^\d\d:\d\d$/.test(time) ? time : null, repeat, weekdays: [0,1,2,3,4], intervalDays: 2, startDate: new Date().toISOString().slice(0,10) }); setTitle(''); setTime(''); };
+  return <View style={{ flex: 1 }}><SubScreenHeader title="루틴" onBack={onBack} /><ScrollView contentContainerStyle={styles.pointColorBody}>
+    <Text style={styles.desc}>반복 일정·할일을 설정하면 해당 날짜에 자동으로 추가돼요.</Text>
+    {routines.map((r) => <View key={r.id} style={styles.catListRow}><Text style={styles.catListLabel}>{r.title} · {r.repeat === 'daily' ? '매일' : r.repeat === 'weekly' ? '평일' : `${r.intervalDays}일 간격`}{r.time ? ` · ${r.time}` : ''}</Text><Pressable onPress={() => removeRoutine(r.id)}><IconClose /></Pressable></View>)}
+    <TextInput style={styles.addCatInput} value={title} onChangeText={setTitle} placeholder="루틴 이름 (예: 약 먹기)" placeholderTextColor={Colors.textMuted} />
+    <TextInput style={styles.addCatInput} value={time} onChangeText={setTime} placeholder="시간 없음 또는 09:00" placeholderTextColor={Colors.textMuted} />
+    <View style={styles.daysRow}>{(['daily','weekly','interval'] as const).map((key) => <Pressable key={key} onPress={() => setRepeat(key)} style={[styles.dayChip, repeat === key && { backgroundColor: '#111' }]}><Text style={[styles.dayChipText, repeat === key && styles.dayChipTextSel]}>{key === 'daily' ? '매일' : key === 'weekly' ? '평일' : '2일 간격'}</Text></Pressable>)}</View>
+    <Pressable style={[styles.saveCategoryBtn, { backgroundColor: '#111' }]} onPress={add}><Text style={styles.saveCategoryText}>루틴 추가</Text></Pressable>
+  </ScrollView></View>;
 }
 
 export default function SettingsScreen({ onClose }: { onClose: () => void }) {
@@ -208,6 +252,8 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
     body = <PointColorSub onBack={() => setSub(null)} />;
   } else if (sub === 'categories') {
     body = <CategoriesSub onBack={() => setSub(null)} />;
+  } else if (sub === 'routines') {
+    body = <RoutinesSub onBack={() => setSub(null)} />;
   } else if (sub === 'theme') {
     body = (
       <ComingSoonSub Icon={IconPalette} title="테마" desc="지금은 블랙 앤 화이트 라이트 모드만 지원해요. 다크 모드는 준비 중이에요." onBack={() => setSub(null)} />
@@ -243,6 +289,8 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
             </Pressable>
             <Divider />
             <SettingRow Icon={IconPerson} label="카테고리 관리" value={`${categories.length}개`} onPress={() => setSub('categories')} />
+            <Divider />
+            <SettingRow Icon={IconRefresh} label="루틴" value="반복 일정·할일" onPress={() => setSub('routines')} />
           </View>
         </ScrollView>
       </>
@@ -320,4 +368,10 @@ const styles = StyleSheet.create({
     width: 48, height: 48, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
   },
+  editSwatch: { width: 24, height: 24, borderRadius: 12 },
+  editSwatchSelected: { borderWidth: 3, borderColor: Colors.textPrimary },
+  iconChoiceRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 12 },
+  iconChoice: { width: 34, height: 34, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  saveCategoryBtn: { margin: 16, marginTop: 0, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
+  saveCategoryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });
