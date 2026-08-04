@@ -1,6 +1,6 @@
 {
   "name": "harulog",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "main": "index.ts",
   "dependencies": {
     "expo": "~57.0.6",

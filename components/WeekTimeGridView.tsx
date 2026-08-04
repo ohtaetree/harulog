@@ -305,6 +305,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
           contentContainerStyle={{ height: totalHeight }}
           scrollEnabled={scrollEnabled}
           bounces={false}
+          alwaysBounceVertical={false}
           overScrollMode="never"
           onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
@@ -420,29 +421,26 @@ function DayColumn({
     setDragRangeState(next);
   };
 
-  const createGesture = Gesture.Pan()
-    .activateAfterLongPress(260)
-    .onStart((e) => {
-      onGestureActive(true);
-      setDragRange({ startY: e.y, endY: e.y });
-    })
-    .onUpdate((e) => {
-      const r = dragRangeRef.current;
-      if (r) setDragRange({ ...r, endY: e.y });
-    })
-    .onFinalize((_e, success) => {
-      const r = dragRangeRef.current;
-      onGestureActive(false);
-      setDragRange(null);
-      if (r && success) {
-        const top = Math.min(r.startY, r.endY);
-        const bottom = Math.max(r.startY, r.endY);
-        const startMin = yToMinutes(top);
-        let endMin = yToMinutes(bottom);
-        if (endMin - startMin < DEFAULT_DURATION_MIN) endMin = startMin + DEFAULT_DURATION_MIN;
-        onCreateRange(date, minutesToTime(startMin), minutesToTime(endMin));
-      }
-    });
+  const beginRange = (y: number) => {
+    onGestureActive(true);
+    setDragRange({ startY: y, endY: y });
+  };
+  const updateRange = (y: number) => {
+    const range = dragRangeRef.current;
+    if (range) setDragRange({ ...range, endY: y });
+  };
+  const finishRange = () => {
+    const range = dragRangeRef.current;
+    if (!range) return;
+    onGestureActive(false);
+    setDragRange(null);
+    const top = Math.min(range.startY, range.endY);
+    const bottom = Math.max(range.startY, range.endY);
+    const startMin = yToMinutes(top);
+    let endMin = yToMinutes(bottom);
+    if (endMin - startMin < DEFAULT_DURATION_MIN) endMin = startMin + DEFAULT_DURATION_MIN;
+    onCreateRange(date, minutesToTime(startMin), minutesToTime(endMin));
+  };
 
   return (
     <View style={[styles.dayCol, { width }, isToday && { backgroundColor: withTint(pointColor) }]}>
@@ -450,9 +448,13 @@ function DayColumn({
         <View key={h} style={[styles.hourLine, { top: h * HOUR_HEIGHT }]} />
       ))}
 
-      <GestureDetector gesture={createGesture}>
-        <View style={StyleSheet.absoluteFill} />
-      </GestureDetector>
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        delayLongPress={260}
+        onLongPress={(e) => beginRange(e.nativeEvent.locationY)}
+        onPressMove={(e) => updateRange(e.nativeEvent.locationY)}
+        onPressOut={finishRange}
+      />
 
       {(() => {
         let top: number, bottom: number, label: string, isDrop = false;

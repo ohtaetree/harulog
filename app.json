@@ -2,7 +2,7 @@
   "expo": {
     "name": "하루로그",
     "slug": "harulog",
-    "version": "1.8.2",
+    "version": "1.8.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
