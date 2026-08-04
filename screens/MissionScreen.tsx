@@ -211,7 +211,16 @@ export default function MissionScreen() {
 
   const { navigate } = useDateFade(loadDate);
 
-  const weekDates = useMemo(() => getDateRange(date, weekVisibleDays), [date, weekVisibleDays]);
+  // 주간 뷰가 보여주는 날짜 구간(weekAnchor)은 선택된 날짜(date)와 별개로 움직인다 —
+  // 스와이프는 구간만 옮기고, 날짜 선택(탭)은 date만 바꾼다. 월간 뷰에서 날짜를 고르고
+  // 주간 뷰로 전환할 때만 구간이 그 날짜에 맞춰 다시 잡힌다.
+  const [weekAnchor, setWeekAnchor] = useState(() => todayStr());
+  useEffect(() => {
+    if (viewMode === 'week') setWeekAnchor(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
+  const weekDates = useMemo(() => getDateRange(weekAnchor, weekVisibleDays), [weekAnchor, weekVisibleDays]);
 
   const makeSnapSwipeGesture = (onPrev: () => void, onNext: () => void) => Gesture.Pan()
     .activeOffsetX([-20, 20])
@@ -221,8 +230,8 @@ export default function MissionScreen() {
       else if (e.translationX > 40) onPrev();
     });
   const headerSwipeGesture = makeSnapSwipeGesture(
-    () => navigate(viewMode === 'week' ? offsetDate(date, -weekVisibleDays) : offsetMonth(date, -1)),
-    () => navigate(viewMode === 'week' ? offsetDate(date, weekVisibleDays) : offsetMonth(date, 1)),
+    () => (viewMode === 'week' ? setWeekAnchor(offsetDate(weekAnchor, -weekVisibleDays)) : navigate(offsetMonth(date, -1))),
+    () => (viewMode === 'week' ? setWeekAnchor(offsetDate(weekAnchor, weekVisibleDays)) : navigate(offsetMonth(date, 1))),
   );
   const monthSwipeGesture = makeSnapSwipeGesture(
     () => navigate(offsetMonth(date, -1)),
@@ -367,7 +376,7 @@ export default function MissionScreen() {
               weekDates={weekDates}
               selectedDate={date}
               onSelectDate={navigate}
-              onNavigate={(delta) => loadDate(offsetDate(date, delta))}
+              onNavigate={(delta) => setWeekAnchor(offsetDate(weekAnchor, delta))}
               onCreateRange={(d, start, end) => {
                 loadDate(d);
                 setPendingRange({ date: d, startTime: start, endTime: end });

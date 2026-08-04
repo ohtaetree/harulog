@@ -121,33 +121,88 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     forceRefresh();
   };
 
-  // 헤더 전체를 감싸는 스와이프 제스처(Pan만) — 그리드(스크롤뷰) 본문에는 걸지 않아서 위아래
-  // 스크롤과 겹치지 않음. 탭으로 날짜 선택은 아래 각 칸의 일반 Pressable이 그대로 담당 —
-  // MonthCalendar의 날짜 칸(조상 GestureDetector의 Pan과 중첩된 Pressable)이 실기기에서 문제
-  //없이 동작하는 것과 같은 패턴. 이전에 탭까지 이 Pan 하나로 처리하려던 시도는 실기기에서
-  // 탭 손뗄 때의 미세한 속도값이 스와이프로 오인되는 문제가 있어서 되돌림.
-  const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-15, 15])
-    .onUpdate((e) => { dragX.setValue(e.translationX); })
-    .onFinalize((e) => {
-      if (!dayWidth) {
-        Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
-        return;
-      }
-      const effective = e.translationX + e.velocityX * FLING_SECONDS;
-      let deltaDays = -Math.round(effective / dayWidth);
-      deltaDays = Math.max(-BUFFER_DAYS, Math.min(BUFFER_DAYS, deltaDays));
+  // 그리드 본문 스와이프 — RNGH 제스처 대신 RN 기본 터치 이벤트(onTouch*)로 직접 처리한다.
+  // 이유: 웹에서 RNGH GestureDetector는 조상 뷰에 touch-action:none을 강제로 씌우는데, 이걸
+  // 스크롤뷰를 감싸는 조상에 걸면 세로 스크롤 자체가 막혀버림(이전에 겪은 버그). 기본 터치
+  // 이벤트는 그런 부작용이 없어서 세로 스크롤과 안전하게 공존한다.
+  // 길게 눌러 일정 생성/재배치하는 기존 제스처(DayColumn/ScheduledBlock, 그리드 안쪽에 중첩)와
+  // 안 겹치도록, 터치 시작 후 SWIPE_DECISION_MS 안에 충분히 움직였을 때만 스와이프로 인정하고,
+  // 그 시간 안에 안 움직이면(=길게 누르는 중) 이 핸들러는 완전히 손을 뗀다.
+  const SWIPE_DECISION_MS = 200;
+  const MOVE_THRESHOLD = 15;
+  const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const lastMoveRef = useRef<{ x: number; t: number } | null>(null);
+  const swipeModeRef = useRef<'undecided' | 'horizontal' | 'rejected'>('undecided');
 
-      if (deltaDays === 0) {
-        Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+  const commitOrSpringBack = (dx: number, velocityX: number) => {
+    if (!dayWidth) {
+      Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+      return;
+    }
+    const effective = dx + velocityX * FLING_SECONDS;
+    let deltaDays = -Math.round(effective / dayWidth);
+    deltaDays = Math.max(-BUFFER_DAYS, Math.min(BUFFER_DAYS, deltaDays));
+
+    if (deltaDays === 0) {
+      Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+      return;
+    }
+    const finalX = -deltaDays * dayWidth;
+    Animated.timing(dragX, { toValue: finalX, duration: 200, useNativeDriver: true }).start(() => {
+      dragX.setValue(0);
+      onNavigate(deltaDays);
+    });
+  };
+
+  const handleTouchStart = (e: any) => {
+    const t = e.nativeEvent.touches?.[0];
+    if (!t) return;
+    touchStartRef.current = { x: t.pageX, y: t.pageY, t: Date.now() };
+    lastMoveRef.current = { x: t.pageX, t: Date.now() };
+    swipeModeRef.current = 'undecided';
+  };
+
+  const handleTouchMove = (e: any) => {
+    const start = touchStartRef.current;
+    if (!start || swipeModeRef.current === 'rejected') return;
+    const t = e.nativeEvent.touches?.[0];
+    if (!t) return;
+    const dx = t.pageX - start.x;
+    const dy = t.pageY - start.y;
+
+    if (swipeModeRef.current === 'undecided') {
+      if (Date.now() - start.t > SWIPE_DECISION_MS) {
+        swipeModeRef.current = 'rejected';
         return;
       }
-      const finalX = -deltaDays * dayWidth;
-      Animated.timing(dragX, { toValue: finalX, duration: 200, useNativeDriver: true }).start(() => {
-        dragX.setValue(0);
-        onNavigate(deltaDays);
-      });
-    });
+      if (Math.abs(dx) > MOVE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+        swipeModeRef.current = 'horizontal';
+      } else if (Math.abs(dy) > MOVE_THRESHOLD) {
+        swipeModeRef.current = 'rejected';
+        return;
+      } else {
+        return;
+      }
+    }
+
+    dragX.setValue(dx);
+    lastMoveRef.current = { x: t.pageX, t: Date.now() };
+  };
+
+  const handleTouchEnd = (e: any) => {
+    const start = touchStartRef.current;
+    const mode = swipeModeRef.current;
+    touchStartRef.current = null;
+    swipeModeRef.current = 'undecided';
+    if (mode !== 'horizontal' || !start) return;
+
+    const t = e.nativeEvent.changedTouches?.[0];
+    const dx = t ? t.pageX - start.x : 0;
+    const last = lastMoveRef.current;
+    const dt = last ? Math.max(1, Date.now() - last.t) : 1;
+    const velocityX = last && t ? (t.pageX - last.x) / dt * 1000 : 0;
+    commitOrSpringBack(dx, velocityX);
+  };
 
   const carouselTransform = { transform: [{ translateX: Animated.subtract(dragX, panelWidth) }] };
   const stripWidth = dayWidth * stripDates.length;
@@ -161,42 +216,48 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
         setPanelWidth(w);
       }}
     >
-      {/* 요일 + 날짜 헤더 — 스와이프는 여기서만 인식 */}
+      {/* 요일 + 날짜 헤더 — 탭으로 날짜 선택만 담당 (스와이프는 아래 그리드에서 인식) */}
       <View style={styles.dateHeaderRow}>
         <View style={{ width: LABEL_WIDTH }} />
         <View style={{ flex: 1, overflow: 'hidden' }}>
           {panelWidth > 0 && (
-            <GestureDetector gesture={swipeGesture}>
-              <Animated.View style={[{ flexDirection: 'row', width: stripWidth }, carouselTransform]}>
-                {stripDates.map((d) => {
-                  const isToday = d === today;
-                  const isSelected = d === selectedDate;
-                  const dow = dowIndex(d);
-                  const weekendColor = dow === 6 ? '#E5484D' : dow === 5 ? '#2170D8' : undefined;
-                  return (
-                    <Pressable key={d} style={[styles.dateHeaderCol, { width: dayWidth }]} onPress={() => onSelectDate(d)}>
-                      <Text style={[styles.dowText, weekendColor && { color: weekendColor }]}>{DOW_LABELS[dow]}</Text>
-                      <View style={[styles.dateCircle, isSelected && { backgroundColor: pointColor }]}>
-                        <Text style={[
-                          styles.dateNumText,
-                          weekendColor && { color: weekendColor },
-                          isToday && !isSelected && { color: pointColor, fontWeight: '800' },
-                          isSelected && styles.dateNumTextSel,
-                        ]}>
-                          {parseInt(d.slice(8), 10)}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </Animated.View>
-            </GestureDetector>
+            <Animated.View style={[{ flexDirection: 'row', width: stripWidth }, carouselTransform]}>
+              {stripDates.map((d) => {
+                const isToday = d === today;
+                const isSelected = d === selectedDate;
+                const dow = dowIndex(d);
+                const weekendColor = dow === 6 ? '#E5484D' : dow === 5 ? '#2170D8' : undefined;
+                return (
+                  <Pressable key={d} style={[styles.dateHeaderCol, { width: dayWidth }]} onPress={() => onSelectDate(d)}>
+                    <Text style={[styles.dowText, weekendColor && { color: weekendColor }]}>{DOW_LABELS[dow]}</Text>
+                    <View style={[styles.dateCircle, isSelected && { backgroundColor: pointColor }]}>
+                      <Text style={[
+                        styles.dateNumText,
+                        weekendColor && { color: weekendColor },
+                        isToday && !isSelected && { color: pointColor, fontWeight: '800' },
+                        isSelected && styles.dateNumTextSel,
+                      ]}>
+                        {parseInt(d.slice(8), 10)}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </Animated.View>
           )}
         </View>
       </View>
 
-      {/* 시간대별 그리드 — 세로 스크롤만 담당, 스와이프 제스처는 걸지 않음 */}
-      <View ref={bodyRef} style={styles.body} collapsable={false}>
+      {/* 시간대별 그리드 — 스와이프(요일 넘기기)와 세로 스크롤을 함께 처리 */}
+      <View
+        ref={bodyRef}
+        style={styles.body}
+        collapsable={false}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
         <ScrollView
           ref={scrollRef}
           style={styles.scroll}
