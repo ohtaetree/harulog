@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   },
   todoBody: { flex: 1 },
   todoTitle: { fontSize: 13, color: Colors.textPrimary, lineHeight: 18 },
-  todoTitleDone: { color: Colors.textMuted },
+  todoTitleDone: { color: Colors.textMuted, textDecorationLine: 'line-through' },
 
   empty: { fontSize: 12, color: Colors.textMuted, textAlign: 'center', paddingTop: 24 },
 

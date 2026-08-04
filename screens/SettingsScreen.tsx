@@ -140,20 +140,26 @@ function CategoriesSub({ onBack }: { onBack: () => void }) {
           "미분류"가 아니라 자체 섹션으로 계속 표시돼요.
         </Text>
 
+        <View style={styles.addCatRow}>
+          <TextInput style={styles.addCatInput} value={input} onChangeText={setInput} placeholder="새 카테고리 이름" placeholderTextColor={Colors.textMuted} maxLength={20} returnKeyType="done" onSubmitEditing={handleAdd} />
+          <Pressable style={[styles.addCatBtn, { backgroundColor: pointColor }]} onPress={handleAdd}><IconPlus size={18} color="#fff" /></Pressable>
+        </View>
+
         <View style={styles.catListWrap}>
           {categories.map((c) => (
-            <Pressable key={c} style={styles.catListRow} onPress={() => {
-              const meta = categoryMeta[c] ?? { color: '#6B6B6B', icon: 'tag' as CategoryIconKey };
-              setEditing(c); setEditName(c); setEditColor(meta.color); setEditIcon(meta.icon);
-            }}>
+            <View key={c} style={styles.catListRow}>
               <View style={styles.catListIconWrap}>
                 <IconPerson size={14} color={categoryMeta[c]?.color ?? Colors.textSecondary} />
               </View>
               <Text style={styles.catListLabel}>{c}</Text>
+              <Pressable onPress={() => {
+                const meta = categoryMeta[c] ?? { color: '#6B6B6B', icon: 'tag' as CategoryIconKey };
+                setEditing(c); setEditName(c); setEditColor(meta.color); setEditIcon(meta.icon);
+              }} hitSlop={10}><IconPencil size={15} color={Colors.textSecondary} /></Pressable>
               <Pressable onPress={() => removeCategory(c)} hitSlop={10}>
                 <IconClose size={14} color={Colors.textMuted} />
               </Pressable>
-            </Pressable>
+            </View>
           ))}
           {categories.length === 0 && (
             <Text style={styles.desc}>카테고리가 없어요. 아래에서 추가해보세요.</Text>
@@ -175,21 +181,6 @@ function CategoriesSub({ onBack }: { onBack: () => void }) {
           </View>
         )}
 
-        <View style={styles.addCatRow}>
-          <TextInput
-            style={styles.addCatInput}
-            value={input}
-            onChangeText={setInput}
-            placeholder="새 카테고리 이름"
-            placeholderTextColor={Colors.textMuted}
-            maxLength={20}
-            returnKeyType="done"
-            onSubmitEditing={handleAdd}
-          />
-          <Pressable style={[styles.addCatBtn, { backgroundColor: pointColor }]} onPress={handleAdd}>
-            <IconPlus size={18} color="#fff" />
-          </Pressable>
-        </View>
       </ScrollView>
     </View>
   );

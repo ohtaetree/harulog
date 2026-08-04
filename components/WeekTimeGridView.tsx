@@ -78,6 +78,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const scrollOffsetRef = useRef(0);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [, setTick] = useState(0);
+  const [nowMinutes, setNowMinutes] = useState(() => new Date().getHours() * 60 + new Date().getMinutes());
   const forceRefresh = () => setTick((n) => n + 1);
 
   const visibleDays = weekDates.length;
@@ -92,6 +93,10 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: (INITIAL_SCROLL_HOUR - START_HOUR) * HOUR_HEIGHT, animated: false });
+  }, []);
+  useEffect(() => {
+    const timer = setInterval(() => { const now = new Date(); setNowMinutes(now.getHours() * 60 + now.getMinutes()); }, 60_000);
+    return () => clearInterval(timer);
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -333,13 +338,13 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
                         priorityColor={PRIORITY_COLOR}
                         onCreateRange={onCreateRange}
                         onEditItem={onEditItem}
-                        onToggle={handleToggle}
                         pending={pendingRange && pendingRange.date === d ? pendingRange : null}
                         onItemDragStart={onItemDragStart}
                         onItemDragUpdate={onItemDragUpdate}
                         onItemDragEnd={onItemDragEnd}
                         draggingId={draggingId}
                         onGestureActive={setVerticalScrollLocked}
+                        nowMinutes={nowMinutes}
                         dropPreview={dropPreview && dropPreview.date === d ? { time: dropPreview.time, durationMin: dropPreview.durationMin } : null}
                       />
                     ) : (
@@ -396,14 +401,13 @@ function DayColumnPreview({ date, width, hours, isToday, pointColor, priorityCol
 }
 
 function DayColumn({
-  date, width, hours, isToday, pointColor, priorityColor, onCreateRange, onEditItem, onToggle, pending,
-  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview, onGestureActive,
+  date, width, hours, isToday, pointColor, priorityColor, onCreateRange, onEditItem, pending,
+  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview, onGestureActive, nowMinutes,
 }: {
   date: string; width: number; hours: number[]; isToday: boolean; pointColor: string;
   priorityColor: Record<Priority, string>;
   onCreateRange: (date: string, startTime: string, endTime: string) => void;
   onEditItem: (item: MissionRow) => void;
-  onToggle: (item: MissionRow) => void;
   pending: PendingRange | null;
   onItemDragStart: (item: MissionRow, x: number, y: number, offsetMinutes?: number) => void;
   onItemDragUpdate: (x: number, y: number) => void;
@@ -411,6 +415,7 @@ function DayColumn({
   draggingId: number | null;
   dropPreview: { time: string; durationMin: number } | null;
   onGestureActive: (active: boolean) => void;
+  nowMinutes: number;
 }) {
   const dayMissions = getMissions(date).filter((m) => !!m.start_time);
 
@@ -447,6 +452,7 @@ function DayColumn({
       {hours.map((h) => (
         <View key={h} style={[styles.hourLine, { top: h * HOUR_HEIGHT }]} />
       ))}
+      {isToday && <View pointerEvents="none" style={[styles.nowLine, { top: (nowMinutes / 60) * HOUR_HEIGHT }]} />}
 
       <Pressable
         style={StyleSheet.absoluteFill}
@@ -493,6 +499,7 @@ function DayColumn({
         const height = Math.max((endMin - startMin) / 60 * HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
         const color = priorityColor[item.priority];
         const done = item.done === 1;
+        const past = isToday && endMin <= nowMinutes;
 
         return (
           <ScheduledBlock
@@ -502,9 +509,9 @@ function DayColumn({
             height={height}
             color={color}
             done={done}
+            past={past}
             dragging={draggingId === item.id}
             onEdit={() => onEditItem(item)}
-            onToggle={() => onToggle(item)}
             onDragStart={onItemDragStart}
             onDragUpdate={onItemDragUpdate}
             onDragEnd={onItemDragEnd}
@@ -516,9 +523,9 @@ function DayColumn({
   );
 }
 
-function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onToggle, onDragStart, onDragUpdate, onDragEnd, onGestureActive }: {
-  item: MissionRow; top: number; height: number; color: string; done: boolean; dragging: boolean;
-  onEdit: () => void; onToggle: () => void;
+function ScheduledBlock({ item, top, height, color, done, past, dragging, onEdit, onDragStart, onDragUpdate, onDragEnd, onGestureActive }: {
+  item: MissionRow; top: number; height: number; color: string; done: boolean; past: boolean; dragging: boolean;
+  onEdit: () => void;
   onDragStart: (item: MissionRow, x: number, y: number, offsetMinutes?: number) => void;
   onDragUpdate: (x: number, y: number) => void;
   onDragEnd: (item: MissionRow, x: number, y: number) => void;
@@ -544,12 +551,7 @@ function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onTo
 
   return (
     <GestureDetector gesture={blockGesture}>
-      <View style={[styles.block, { top, height, borderLeftColor: color }, dragging && styles.blockDragging]}>
-        <Pressable onPress={onToggle} hitSlop={4} style={styles.blockCheckbox}>
-          <View style={[styles.checkDot, done && { backgroundColor: color, borderColor: color }]}>
-          {done && <IconCheck size={10} color="#fff" />}
-          </View>
-        </Pressable>
+      <View style={[styles.block, { top, height, borderLeftColor: color }, past && styles.blockPast, dragging && styles.blockDragging]}>
         <Text numberOfLines={height < 30 ? 1 : 2} style={[styles.blockTitle, done && styles.blockTitleDone]}>
           {item.title}
         </Text>
@@ -588,6 +590,7 @@ const styles = StyleSheet.create({
   hourLine: {
     position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: Colors.border,
   },
+  nowLine: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: '#E5484D', zIndex: 5 },
 
   dragPreview: {
     position: 'absolute', left: 1, right: 1,
@@ -603,6 +606,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   blockDragging: { opacity: 0.3 },
+  blockPast: { opacity: 0.38 },
   blockCheckbox: { alignSelf: 'flex-start' },
   checkDot: {
     width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: Colors.border,
