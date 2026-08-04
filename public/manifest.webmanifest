@@ -1,0 +1,13 @@
+{
+  "name": "하루로그",
+  "short_name": "하루로그",
+  "start_url": "/harulog/",
+  "scope": "/harulog/",
+  "display": "standalone",
+  "background_color": "#F8F9FA",
+  "theme_color": "#F8F9FA",
+  "lang": "ko",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

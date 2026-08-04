@@ -25,7 +25,16 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "하루로그",
+      "shortName": "하루로그",
+      "themeColor": "#F8F9FA",
+      "backgroundColor": "#F8F9FA",
+      "display": "standalone",
+      "lang": "ko"
+    },
+    "experiments": {
+      "baseUrl": "/harulog"
     },
     "plugins": [
       "expo-sqlite"
