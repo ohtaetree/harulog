@@ -9,6 +9,7 @@ import { Colors } from './constants/colors';
 import { initDb } from './db/database';
 import { useSettingsStore } from './stores/settingsStore';
 import { useIsDesktop } from './hooks/useIsDesktop';
+import { useIsTouchDevice } from './hooks/useIsTouchDevice';
 
 function AppContent() {
   const { onboardingDone } = useSettingsStore();
@@ -18,6 +19,7 @@ function AppContent() {
 export default function App() {
   useEffect(() => { initDb(); }, []);
   const isDesktop = useIsDesktop();
+  const isTouchDevice = useIsTouchDevice();
 
   if (Platform.OS === 'web') {
     // 데스크톱 폭: 폰 프레임 없이 창 전체를 채움 (사이드바 레이아웃은 TabNavigator가 담당)
@@ -32,7 +34,19 @@ export default function App() {
       );
     }
 
-    // 좁은 웹(모바일 브라우저): 기존처럼 폰 프레임 안에서 렌더링
+    // 실제 휴대폰(터치 기기): 고정 프레임 없이 실제 화면 크기를 그대로 채움
+    if (isTouchDevice) {
+      return (
+        <GestureHandlerRootView style={styles.mobileShell}>
+          <SafeAreaProvider>
+            <StatusBar style="dark" />
+            <AppContent />
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      );
+    }
+
+    // 좁은 데스크톱 브라우저 창: 폰 프레임 안에서 미리보기 형태로 렌더링
     return (
       <View style={styles.webShell}>
         <GestureHandlerRootView style={styles.phoneScreen}>
@@ -68,6 +82,11 @@ const styles = StyleSheet.create({
     height: 852,
     backgroundColor: Colors.background,
     overflow: 'hidden',
+  },
+  mobileShell: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    height: '100dvh' as any,
   },
   desktopShell: {
     flex: 1,
