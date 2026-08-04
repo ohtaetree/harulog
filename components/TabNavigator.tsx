@@ -66,14 +66,13 @@ export default function TabNavigator() {
         {TABS.map((tab, i) => {
           const isActive = i === active;
           return (
-            <Pressable key={tab.key} onPress={() => handlePress(i)} style={styles.tab}>
+            <Pressable key={tab.key} onPress={() => handlePress(i)} style={[styles.tab, { opacity: isActive ? 1 : 0.42 }]}>
               <Animated.View style={{ transform: [{ scale: bounceAnims[i] }] }}>
                 <tab.Icon size={22} color={isActive ? pointColor : Colors.textMuted} />
               </Animated.View>
               <Text style={[styles.label, isActive && { color: pointColor }]}>
                 {tab.label}
               </Text>
-              {isActive && <View style={[styles.activeDot, { backgroundColor: pointColor }]} />}
             </Pressable>
           );
         })}
@@ -109,16 +108,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    paddingTop: 6,
-    paddingBottom: 8,
+    paddingTop: 3,
+    paddingBottom: 4,
   },
   tab: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    gap: 2, paddingVertical: 4,
+    gap: 1, paddingVertical: 2,
   },
   label: { fontSize: 10, fontWeight: '600', color: Colors.textMuted, letterSpacing: -0.2 },
-  activeDot: {
-    width: 4, height: 4, borderRadius: 2,
-    marginTop: 2,
-  },
 });

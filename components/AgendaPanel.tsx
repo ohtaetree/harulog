@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated, Dimensions } from 'react-native';
 import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
@@ -120,16 +120,19 @@ interface Props {
   onItemDragUpdate?: (x: number, y: number) => void;
   onItemDragEnd?: (item: MissionRow, x: number, y: number) => void;
   draggingId?: number | null;
+  selectedItem?: MissionRow | null;
+  onCloseSelected?: () => void;
 }
 
 export default function AgendaPanel({
   date, missions, categories, expanded, onToggle, onEditItem, onAdd, onToggleItem, onDeleteItem,
-  draggable, onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId,
+  draggable, onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, selectedItem, onCloseSelected,
 }: Props) {
   const pointColor = usePointColor();
   const anim = useRef(new Animated.Value(expanded ? 1 : 0)).current;
   const screenHeight = Dimensions.get('window').height;
   const expandedHeight = screenHeight * PANEL_HEIGHT_RATIO;
+  const [full, setFull] = useState(false);
 
   useEffect(() => {
     Animated.spring(anim, { toValue: expanded ? 1 : 0, useNativeDriver: false, bounciness: 4 }).start();
@@ -145,11 +148,13 @@ export default function AgendaPanel({
   const swipeGesture = Gesture.Pan()
     .onEnd((e) => {
       if (!expanded && e.translationY < -20) onToggle();
+      else if (expanded && !full && e.translationY < -20) setFull(true);
+      else if (full && e.translationY > 20) setFull(false);
       else if (expanded && e.translationY > 20) onToggle();
     });
   const handleGesture = Gesture.Race(tapGesture, swipeGesture);
 
-  const height = anim.interpolate({ inputRange: [0, 1], outputRange: [HANDLE_HEIGHT, expandedHeight] });
+  const height = full ? screenHeight : anim.interpolate({ inputRange: [0, 1], outputRange: [HANDLE_HEIGHT, expandedHeight] });
 
   return (
     <Animated.View style={[styles.panel, { height }]}>
@@ -167,7 +172,12 @@ export default function AgendaPanel({
         </View>
       </GestureDetector>
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      {selectedItem ? <View style={styles.detail}>
+        <View style={styles.detailHeader}><Text style={styles.detailType}>일정</Text><Pressable onPress={onCloseSelected}><IconClose size={22} color={Colors.textPrimary} /></Pressable></View>
+        <Text style={styles.detailTitle}>{selectedItem.title}</Text>
+        <Text style={styles.detailMeta}>{selectedItem.start_time ? `${selectedItem.start_time}${selectedItem.end_time ? ` — ${selectedItem.end_time}` : ''}` : '시간 미지정'}</Text>
+        <View style={styles.detailActions}><Pressable style={styles.detailEdit} onPress={() => onEditItem(selectedItem)}><Text style={styles.detailEditText}>수정</Text></Pressable><Pressable style={styles.detailDelete} onPress={() => { onDeleteItem(selectedItem.id); onCloseSelected?.(); }}><Text style={styles.detailDeleteText}>삭제</Text></Pressable></View>
+      </View> : <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
         {timed.map((m) => (
           <Pressable key={m.id} style={styles.timedRow} onPress={() => onEditItem(m)}>
             <Text style={styles.timedTime}>{m.start_time}</Text>
@@ -201,7 +211,7 @@ export default function AgendaPanel({
         {missions.length === 0 && (
           <Text style={styles.empty}>예정된 일정이 없어요</Text>
         )}
-      </ScrollView>
+      </ScrollView>}
 
       {expanded && (
         <Pressable style={styles.addBtn} onPress={() => onAdd()}>
@@ -292,4 +302,5 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.border, borderStyle: 'dashed',
   },
   addBtnText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
+  detail: { flex: 1, padding: 20, gap: 18 }, detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, detailType: { fontSize: 13, fontWeight: '700', color: Colors.textMuted }, detailTitle: { fontSize: 22, fontWeight: '800', color: Colors.textPrimary }, detailMeta: { fontSize: 15, color: Colors.textSecondary }, detailActions: { flexDirection: 'row', gap: 8, marginTop: 'auto' }, detailEdit: { flex: 1, padding: 13, borderRadius: 12, backgroundColor: Colors.surface, alignItems: 'center' }, detailDelete: { flex: 1, padding: 13, borderRadius: 12, backgroundColor: '#FFF0F0', alignItems: 'center' }, detailEditText: { fontWeight: '700', color: Colors.textPrimary }, detailDeleteText: { fontWeight: '700', color: '#D33' },
 });

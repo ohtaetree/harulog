@@ -277,6 +277,7 @@ export default function MissionScreen() {
   };
 
   const [agendaOpen, setAgendaOpen] = useState(false);
+  const [agendaSelected, setAgendaSelected] = useState<MissionRow | null>(null);
 
   const gridRef = useRef<WeekTimeGridHandle>(null);
   const [dragItem, setDragItem] = useState<MissionRow | null>(null);
@@ -407,6 +408,8 @@ export default function MissionScreen() {
             expanded={agendaOpen}
             onToggle={() => setAgendaOpen((v) => !v)}
             onEditItem={openEdit}
+            selectedItem={agendaSelected}
+            onCloseSelected={() => setAgendaSelected(null)}
             onAdd={(category) => openAdd(undefined, category)}
             onToggleItem={toggle}
             onDeleteItem={remove}
@@ -427,7 +430,7 @@ export default function MissionScreen() {
                 setPendingRange({ date: d, startTime: start, endTime: end });
                 openAdd(start, undefined, end);
               }}
-              onEditItem={openEdit}
+              onEditItem={(item) => { setAgendaSelected(item); setAgendaOpen(true); }}
               pendingRange={pendingRange}
               onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
               onItemDragUpdate={handleDragUpdate}
@@ -444,6 +447,8 @@ export default function MissionScreen() {
             expanded={agendaOpen}
             onToggle={() => setAgendaOpen((v) => !v)}
             onEditItem={openEdit}
+            selectedItem={agendaSelected}
+            onCloseSelected={() => setAgendaSelected(null)}
             onAdd={(category) => openAdd(undefined, category)}
             onToggleItem={toggle}
             onDeleteItem={remove}
