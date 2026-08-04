@@ -298,10 +298,10 @@ export default function MissionScreen() {
     setDragItem(item);
     dragDurationRef.current = durationOf(item);
     dragOffsetRef.current = offsetMinutes;
-    ghostX.setValue(x); ghostY.setValue(y);
+    ghostX.setValue(x); ghostY.setValue(y - (offsetMinutes / 60) * 36);
   };
   const handleDragUpdate = (x: number, y: number) => {
-    ghostX.setValue(x); ghostY.setValue(y);
+    ghostX.setValue(x); ghostY.setValue(y - (dragOffsetRef.current / 60) * 36);
     gridRef.current?.getDropTarget(x, y, (target) => {
       if (!target) { setDropPreview((p) => (p ? null : p)); return; }
       const next = { date: target.date, time: minutesToTimeStr(timeToMinutes(target.time) - dragOffsetRef.current), durationMin: dragDurationRef.current };
@@ -334,7 +334,7 @@ export default function MissionScreen() {
         const duration = Math.max(endMin - startMin, 15);
         const newStartMin = timeToMinutes(target.time) - pointerOffset;
         const newEndTime = minutesToTimeStr(newStartMin + duration);
-        update(item.id, item.title, item.priority, item.category, target.time, newEndTime, target.date);
+        update(item.id, item.title, item.priority, item.category, minutesToTimeStr(newStartMin), newEndTime, target.date);
       });
       return;
     }

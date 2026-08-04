@@ -135,8 +135,8 @@ export default function AgendaPanel({
   const [full, setFull] = useState(false);
 
   useEffect(() => {
-    Animated.spring(anim, { toValue: expanded ? 1 : 0, useNativeDriver: false, bounciness: 4 }).start();
-  }, [expanded]);
+    Animated.timing(anim, { toValue: full ? 2 : expanded ? 1 : 0, duration: 320, useNativeDriver: false }).start();
+  }, [expanded, full]);
 
   const timed = useMemo(() => missions
     .filter((m) => !!m.start_time)
@@ -154,7 +154,7 @@ export default function AgendaPanel({
     });
   const handleGesture = Gesture.Race(tapGesture, swipeGesture);
 
-  const height = full ? screenHeight : anim.interpolate({ inputRange: [0, 1], outputRange: [HANDLE_HEIGHT, expandedHeight] });
+  const height = anim.interpolate({ inputRange: [0, 1, 2], outputRange: [HANDLE_HEIGHT, expandedHeight, screenHeight] });
 
   return (
     <Animated.View style={[styles.panel, { height }]}>
@@ -162,12 +162,8 @@ export default function AgendaPanel({
         <View style={styles.handleArea}>
           <View style={styles.handleBar} />
           <View style={styles.handleRow}>
-            <Text style={styles.handleLabel}>일정</Text>
-            <Animated.View style={{
-              transform: [{ rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }],
-            }}>
-              <IconChevronUp size={16} color={Colors.textSecondary} />
-            </Animated.View>
+            <Text style={styles.handleLabel}>{missions.length === 0 ? '예정된 일정 없음' : '일정'}</Text>
+            <Pressable onPress={() => onAdd()} style={styles.handleAdd}><IconPlus size={20} color={Colors.textSecondary} /></Pressable>
           </View>
         </View>
       </GestureDetector>
@@ -240,10 +236,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
   },
   handleRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6,
     paddingTop: 6,
   },
   handleLabel: { fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
+  handleAdd: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface },
 
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, gap: 2 },
