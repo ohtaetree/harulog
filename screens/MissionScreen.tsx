@@ -366,7 +366,7 @@ export default function MissionScreen() {
               weekDates={weekDates}
               selectedDate={date}
               onSelectDate={navigate}
-              onNavigate={(delta) => navigate(offsetDate(date, delta))}
+              onNavigate={(delta) => loadDate(offsetDate(date, delta))}
               onCreateRange={(d, start, end) => {
                 loadDate(d);
                 setPendingRange({ date: d, startTime: start, endTime: end });
