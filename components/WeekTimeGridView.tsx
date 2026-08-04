@@ -348,13 +348,13 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
                         dropPreview={dropPreview && dropPreview.date === d ? { time: dropPreview.time, durationMin: dropPreview.durationMin } : null}
                       />
                     ) : (
-                      <DayColumnPreview key={d} date={d} width={dayWidth} hours={hours} isToday={d === today} pointColor={pointColor} priorityColor={PRIORITY_COLOR} />
+                      <DayColumnPreview key={d} date={d} width={dayWidth} hours={hours} isToday={d === today} pointColor={pointColor} priorityColor={PRIORITY_COLOR} nowMinutes={nowMinutes} />
                     );
                   })}
                 </Animated.View>
               )}
             </View>
-            <View pointerEvents="none" style={[styles.nowLine, { top: (nowMinutes / 60) * HOUR_HEIGHT, backgroundColor: pointColor }]} />
+            <View pointerEvents="none" style={[styles.nowLine, { left: LABEL_WIDTH, top: (nowMinutes / 60) * HOUR_HEIGHT, backgroundColor: `${pointColor}35` }]} />
           </View>
         </ScrollView>
       </View>
@@ -368,8 +368,8 @@ function withTint(color: string) {
   return `${color}0D`;
 }
 
-function DayColumnPreview({ date, width, hours, isToday, pointColor, priorityColor }: {
-  date: string; width: number; hours: number[]; isToday: boolean; pointColor: string; priorityColor: Record<Priority, string>;
+function DayColumnPreview({ date, width, hours, isToday, pointColor, priorityColor, nowMinutes }: {
+  date: string; width: number; hours: number[]; isToday: boolean; pointColor: string; priorityColor: Record<Priority, string>; nowMinutes: number;
 }) {
   const dayMissions = getMissions(date).filter((m) => !!m.start_time);
   return (
@@ -377,6 +377,7 @@ function DayColumnPreview({ date, width, hours, isToday, pointColor, priorityCol
       {hours.map((h) => (
         <View key={h} style={[styles.hourLine, { top: h * HOUR_HEIGHT }]} />
       ))}
+      {isToday && <View pointerEvents="none" style={[styles.nowLine, { top: (nowMinutes / 60) * HOUR_HEIGHT, backgroundColor: pointColor }]} />}
       {dayMissions.map((item) => {
         const startMin = toMinutes(item.start_time!);
         const endMin = item.end_time ? toMinutes(item.end_time) : startMin + DEFAULT_DURATION_MIN;

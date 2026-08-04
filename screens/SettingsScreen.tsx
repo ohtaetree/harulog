@@ -8,6 +8,7 @@ import {
   IconPalette, IconPerson, IconSliders, IconColumns, IconCheck, IconChevronLeft, IconClose, IconPlus, IconBriefcase, IconMedical, IconPencil, IconHome, IconTag, IconRefresh,
 } from '../components/icons';
 import { Divider, SettingRow, ComingSoonSub, SubScreenHeader, styles as s } from '../components/SettingsUI';
+import { getCategoryIconByKey } from '../utils/categoryIcon';
 
 type SubScreenKey = 'displayMode' | 'weekDays' | 'theme' | 'pointColor' | 'categories' | 'routines';
 
@@ -149,15 +150,15 @@ function CategoriesSub({ onBack }: { onBack: () => void }) {
           {categories.map((c) => (
             <View key={c} style={styles.catListRow}>
               <View style={styles.catListIconWrap}>
-                <IconPerson size={14} color={categoryMeta[c]?.color ?? Colors.textSecondary} />
+                {(() => { const Icon = getCategoryIconByKey(categoryMeta[c]?.icon); return <Icon size={16} color={categoryMeta[c]?.color ?? Colors.textSecondary} />; })()}
               </View>
               <Text style={styles.catListLabel}>{c}</Text>
               <Pressable onPress={() => {
                 const meta = categoryMeta[c] ?? { color: '#6B6B6B', icon: 'tag' as CategoryIconKey };
                 setEditing(c); setEditName(c); setEditColor(meta.color); setEditIcon(meta.icon);
-              }} hitSlop={10}><IconPencil size={15} color={Colors.textSecondary} /></Pressable>
+              }} hitSlop={12} style={styles.categoryAction}><IconPencil size={18} color={Colors.textSecondary} /></Pressable>
               <Pressable onPress={() => removeCategory(c)} hitSlop={10}>
-                <IconClose size={14} color={Colors.textMuted} />
+                <IconClose size={18} color={Colors.textMuted} />
               </Pressable>
             </View>
           ))}
@@ -349,6 +350,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   catListLabel: { flex: 1, fontSize: 15, color: Colors.textPrimary, fontWeight: '600' },
+  categoryAction: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: Colors.surface },
   addCatRow: { flexDirection: 'row', gap: 10 },
   addCatInput: {
     flex: 1, borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
