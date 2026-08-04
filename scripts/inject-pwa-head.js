@@ -14,10 +14,21 @@ const tags = `
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 </head>`;
 
-const html = fs.readFileSync(indexPath, 'utf8');
+let html = fs.readFileSync(indexPath, 'utf8');
+
+// Without viewport-fit=cover, env(safe-area-inset-*) resolves to 0, so
+// react-native-safe-area-context reports zero insets on iOS — the header
+// then renders under the status bar/notch in standalone home-screen mode.
+html = html.replace(
+  '<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />',
+  '<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />'
+);
+
 if (html.includes('manifest.webmanifest')) {
   console.log('PWA tags already present, skipping injection.');
 } else {
-  fs.writeFileSync(indexPath, html.replace('</head>', tags));
+  html = html.replace('</head>', tags);
   console.log('Injected PWA head tags into dist/index.html');
 }
+
+fs.writeFileSync(indexPath, html);
