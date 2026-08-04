@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useSettingsStore, POINT_COLOR_PRESETS, DayDisplayMode, MIN_WEEK_VISIBLE_DAYS, MAX_WEEK_VISIBLE_DAYS } from '../stores/settingsStore';
 import { usePointColor } from '../hooks/usePointColor';
 import {
-  IconPalette, IconPerson, IconSliders, IconColumns, IconCheck, IconClose, IconPlus,
+  IconPalette, IconPerson, IconSliders, IconColumns, IconCheck, IconChevronLeft, IconClose, IconPlus,
 } from '../components/icons';
 import { Divider, SettingRow, ComingSoonSub, SubScreenHeader, styles as s } from '../components/SettingsUI';
 
@@ -176,6 +176,26 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
   const categories = useSettingsStore((st) => st.categories);
   const pointColor = usePointColor();
   const [sub, setSub] = useState<SubScreenKey | null>(null);
+  const edgeSwipeStart = useRef<{ x: number; y: number } | null>(null);
+
+  // iOS의 뒤로가기와 같은 왼쪽 가장자리 → 오른쪽 스와이프. 스크롤과 충돌하지
+  // 않도록 화면 가장자리에서 시작하고 수평 이동이 훨씬 큰 경우에만 닫는다.
+  const handleEdgeSwipeStart = (e: any) => {
+    const touch = e.nativeEvent.touches?.[0];
+    edgeSwipeStart.current = touch && touch.pageX <= 32 ? { x: touch.pageX, y: touch.pageY } : null;
+  };
+  const handleEdgeSwipeEnd = (e: any) => {
+    const start = edgeSwipeStart.current;
+    edgeSwipeStart.current = null;
+    const touch = e.nativeEvent.changedTouches?.[0];
+    if (!start || !touch) return;
+    const dx = touch.pageX - start.x;
+    const dy = touch.pageY - start.y;
+    if (dx >= 72 && dx >= Math.abs(dy) * 1.5) {
+      if (sub) setSub(null);
+      else onClose();
+    }
+  };
 
   const displayModeLabel = DISPLAY_MODE_OPTIONS.find((o) => o.key === dayDisplayMode)?.label ?? '';
 
@@ -196,10 +216,11 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
     body = (
       <>
         <View style={styles.header}>
-          <Text style={s.title}>설정</Text>
-          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={10}>
-            <IconClose size={16} color={Colors.textSecondary} />
+          <Pressable onPress={onClose} style={styles.backBtn} hitSlop={10}>
+            <IconChevronLeft size={22} color={Colors.textPrimary} />
           </Pressable>
+          <Text style={styles.headerTitle}>설정</Text>
+          <View style={styles.backBtn} />
         </View>
         <ScrollView contentContainerStyle={styles.mainBody}>
           <Text style={s.sectionLabel}>보기 설정</Text>
@@ -229,7 +250,12 @@ export default function SettingsScreen({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={['top']}
+      onTouchStart={handleEdgeSwipeStart}
+      onTouchEnd={handleEdgeSwipeEnd}
+    >
       {body}
     </SafeAreaView>
   );
@@ -241,7 +267,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
   },
-  closeBtn: {
+  headerTitle: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary },
+  backBtn: {
     width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.background,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: Colors.border,

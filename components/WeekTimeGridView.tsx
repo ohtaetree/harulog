@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, Easing } from 'react-native';
 import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
@@ -128,8 +128,12 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   // 길게 눌러 일정 생성/재배치하는 기존 제스처(DayColumn/ScheduledBlock, 그리드 안쪽에 중첩)와
   // 안 겹치도록, 터치 시작 후 SWIPE_DECISION_MS 안에 충분히 움직였을 때만 스와이프로 인정하고,
   // 그 시간 안에 안 움직이면(=길게 누르는 중) 이 핸들러는 완전히 손을 뗀다.
-  const SWIPE_DECISION_MS = 200;
-  const MOVE_THRESHOLD = 15;
+  const SWIPE_DECISION_MS = 260;
+  const HORIZONTAL_MOVE_THRESHOLD = 18;
+  const VERTICAL_MOVE_THRESHOLD = 12;
+  // 대각선으로 살짝 움직여도 넘김으로 오인되지 않도록 수평 이동이 세로보다
+  // 충분히 커야만 요일 이동으로 전환한다.
+  const HORIZONTAL_DOMINANCE = 1.6;
   const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const lastMoveRef = useRef<{ x: number; t: number } | null>(null);
   const swipeModeRef = useRef<'undecided' | 'horizontal' | 'rejected'>('undecided');
@@ -148,7 +152,12 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
       return;
     }
     const finalX = -deltaDays * dayWidth;
-    Animated.timing(dragX, { toValue: finalX, duration: 200, useNativeDriver: true }).start(() => {
+    Animated.timing(dragX, {
+      toValue: finalX,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
       dragX.setValue(0);
       onNavigate(deltaDays);
     });
@@ -175,9 +184,15 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
         swipeModeRef.current = 'rejected';
         return;
       }
-      if (Math.abs(dx) > MOVE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+      if (
+        Math.abs(dx) >= HORIZONTAL_MOVE_THRESHOLD
+        && Math.abs(dx) >= Math.abs(dy) * HORIZONTAL_DOMINANCE
+      ) {
         swipeModeRef.current = 'horizontal';
-      } else if (Math.abs(dy) > MOVE_THRESHOLD) {
+      } else if (
+        Math.abs(dy) >= VERTICAL_MOVE_THRESHOLD
+        && Math.abs(dy) > Math.abs(dx) / HORIZONTAL_DOMINANCE
+      ) {
         swipeModeRef.current = 'rejected';
         return;
       } else {

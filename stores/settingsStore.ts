@@ -21,6 +21,7 @@ export const POINT_COLOR_PRESETS = [
 ] as const;
 
 export type DayDisplayMode = 'icon' | 'icon-text' | 'text';
+export type ScheduleViewMode = 'week' | 'month';
 
 export const MIN_WEEK_VISIBLE_DAYS = 3;
 export const MAX_WEEK_VISIBLE_DAYS = 7;
@@ -31,6 +32,7 @@ interface Settings {
   categories: string[];
   dayDisplayMode: DayDisplayMode;
   weekVisibleDays: number;
+  scheduleViewMode: ScheduleViewMode;
 }
 
 function loadSettings(): Settings {
@@ -49,13 +51,14 @@ function loadSettings(): Settings {
           weekVisibleDays: Number.isInteger(parsed.weekVisibleDays)
             && parsed.weekVisibleDays >= MIN_WEEK_VISIBLE_DAYS && parsed.weekVisibleDays <= MAX_WEEK_VISIBLE_DAYS
             ? parsed.weekVisibleDays : 7,
+          scheduleViewMode: parsed.scheduleViewMode === 'month' ? 'month' : 'week',
         };
       }
     } catch {}
   }
   return {
     onboardingDone: false, pointColor: DEFAULT_POINT_COLOR, categories: DEFAULT_CATEGORIES,
-    dayDisplayMode: 'icon', weekVisibleDays: 7,
+    dayDisplayMode: 'icon', weekVisibleDays: 7, scheduleViewMode: 'week',
   };
 }
 
@@ -73,6 +76,7 @@ interface SettingsState extends Settings {
   removeCategory:     (name: string) => void;
   setDayDisplayMode:  (mode: DayDisplayMode) => void;
   setWeekVisibleDays: (days: number) => void;
+  setScheduleViewMode: (mode: ScheduleViewMode) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -119,6 +123,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setWeekVisibleDays(days) {
     const clamped = Math.min(MAX_WEEK_VISIBLE_DAYS, Math.max(MIN_WEEK_VISIBLE_DAYS, Math.round(days)));
     const next: Settings = { ...get(), weekVisibleDays: clamped };
+    saveSettings(next);
+    set(next);
+  },
+
+  setScheduleViewMode(mode) {
+    const next: Settings = { ...get(), scheduleViewMode: mode };
     saveSettings(next);
     set(next);
   },

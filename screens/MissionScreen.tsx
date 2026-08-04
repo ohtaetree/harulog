@@ -197,7 +197,8 @@ export default function MissionScreen() {
   const { date, missions, loadDate, add, update, toggle, remove } = useMissionStore();
   const categories = useSettingsStore((s) => s.categories);
   const weekVisibleDays = useSettingsStore((s) => s.weekVisibleDays);
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
+  const viewMode = useSettingsStore((s) => s.scheduleViewMode);
+  const setViewMode = useSettingsStore((s) => s.setScheduleViewMode);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const dateDropdownRef = useRef<DateDropdownHandle>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -332,7 +333,7 @@ export default function MissionScreen() {
 
           <View style={styles.headerRight}>
             <Pressable
-              onPress={() => setViewMode((m) => (m === 'week' ? 'month' : 'week'))}
+              onPress={() => setViewMode(viewMode === 'week' ? 'month' : 'week')}
               style={styles.viewToggle}>
               <Text style={styles.viewToggleText}>{viewMode === 'week' ? '주' : '월'}</Text>
             </Pressable>
