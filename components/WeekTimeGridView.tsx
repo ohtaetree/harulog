@@ -242,7 +242,10 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     commitOrSpringBack(dx, velocityXRef.current);
   };
 
-  const carouselTransform = { transform: [{ translateX: Animated.subtract(dragX, panelWidth) }] };
+  // stripDates는 항상 앞에 BUFFER_DAYS개의 날짜를 두므로, 표시 일수와 무관하게
+  // 그 고정 버퍼만큼 이동한 위치가 현재 화면의 첫 번째 날짜다.
+  // panelWidth를 쓰면 7일 보기에서만 우연히 일치하고 3~6일 보기에서는 열이 어긋난다.
+  const carouselTransform = { transform: [{ translateX: Animated.subtract(dragX, BUFFER_DAYS * dayWidth) }] };
   const stripWidth = dayWidth * stripDates.length;
 
   return (
