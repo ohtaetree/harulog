@@ -229,33 +229,6 @@ export default function MissionScreen() {
     () => navigate(offsetMonth(date, 1)),
   );
 
-  // 주간 뷰 본문: 손가락을 따라 실시간으로 이동하다 놓으면 다음/이전 구간으로
-  // 자연스럽게 이어지는 드래그 (헤더/월간 뷰의 스냅식 스와이프와는 다름)
-  const weekDragX = useRef(new Animated.Value(0)).current;
-  const weekWidthRef = useRef(400);
-  const weekSwipeGesture = Gesture.Pan()
-    .activeOffsetX([-20, 20])
-    .failOffsetY([-15, 15])
-    .onUpdate((e) => { weekDragX.setValue(e.translationX); })
-    .onEnd((e) => {
-      const width = weekWidthRef.current;
-      const committed = e.translationX < -width * 0.25 || (e.translationX < -30 && e.velocityX < -600);
-      const committedPrev = e.translationX > width * 0.25 || (e.translationX > 30 && e.velocityX > 600);
-      if (committed) {
-        Animated.timing(weekDragX, { toValue: -width, duration: 200, useNativeDriver: true }).start(() => {
-          weekDragX.setValue(0);
-          navigate(offsetDate(date, weekVisibleDays));
-        });
-      } else if (committedPrev) {
-        Animated.timing(weekDragX, { toValue: width, duration: 200, useNativeDriver: true }).start(() => {
-          weekDragX.setValue(0);
-          navigate(offsetDate(date, -weekVisibleDays));
-        });
-      } else {
-        Animated.spring(weekDragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
-      }
-    });
-
   const openAdd = (time?: string, category?: string, endTime?: string) => {
     setEditTarget(undefined); setPresetTime(time); setPresetEnd(endTime); setPresetCat(category); setModalVisible(true);
   };
@@ -387,29 +360,26 @@ export default function MissionScreen() {
         </View>
       ) : (
         <View style={styles.body}>
-          <View style={styles.weekBody} onLayout={(e) => { weekWidthRef.current = e.nativeEvent.layout.width; }}>
-            <GestureDetector gesture={weekSwipeGesture}>
-              <Animated.View style={{ flex: 1, transform: [{ translateX: weekDragX }] }}>
-                <WeekTimeGridView
-                  ref={gridRef}
-                  weekDates={weekDates}
-                  selectedDate={date}
-                  onSelectDate={navigate}
-                  onCreateRange={(d, start, end) => {
-                    loadDate(d);
-                    setPendingRange({ date: d, startTime: start, endTime: end });
-                    openAdd(start, undefined, end);
-                  }}
-                  onEditItem={openEdit}
-                  pendingRange={pendingRange}
-                  onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
-                  onItemDragUpdate={handleDragUpdate}
-                  onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
-                  draggingId={dragItem?.id ?? null}
-                  dropPreview={dropPreview}
-                />
-              </Animated.View>
-            </GestureDetector>
+          <View style={styles.weekBody}>
+            <WeekTimeGridView
+              ref={gridRef}
+              weekDates={weekDates}
+              selectedDate={date}
+              onSelectDate={navigate}
+              onNavigate={(delta) => navigate(offsetDate(date, delta))}
+              onCreateRange={(d, start, end) => {
+                loadDate(d);
+                setPendingRange({ date: d, startTime: start, endTime: end });
+                openAdd(start, undefined, end);
+              }}
+              onEditItem={openEdit}
+              pendingRange={pendingRange}
+              onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
+              onItemDragUpdate={handleDragUpdate}
+              onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
+              draggingId={dragItem?.id ?? null}
+              dropPreview={dropPreview}
+            />
           </View>
 
           <AgendaPanel

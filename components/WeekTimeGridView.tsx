@@ -1,11 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
 import { IconCheck } from './icons';
 import { getMissions, toggleMission, MissionRow, Priority } from '../db/missionDb';
-import { DOW_LABELS, todayStr, dowIndex } from '../utils/dateUtils';
+import { DOW_LABELS, todayStr, dowIndex, offsetDate } from '../utils/dateUtils';
 
 const START_HOUR = 0;
 const END_HOUR = 24;
@@ -49,7 +49,7 @@ export interface WeekTimeGridHandle {
 }
 
 interface Props {
-  weekDates: string[]; // 7 dates, Mon–Sun
+  weekDates: string[]; // currently visible dates
   selectedDate: string;
   onSelectDate: (date: string) => void;
   onCreateRange: (date: string, startTime: string, endTime: string) => void;
@@ -60,11 +60,13 @@ interface Props {
   onItemDragEnd: (item: MissionRow, x: number, y: number) => void;
   draggingId: number | null;
   dropPreview: { date: string; time: string; durationMin: number } | null;
+  /** Called when a horizontal drag commits to the next/prev range (positive = forward). */
+  onNavigate: (deltaDays: number) => void;
 }
 
 const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   weekDates, selectedDate, onSelectDate, onCreateRange, onEditItem, pendingRange,
-  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview,
+  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview, onNavigate,
 }, ref) => {
   const pointColor = usePointColor();
   const today = todayStr();
@@ -73,6 +75,14 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const scrollOffsetRef = useRef(0);
   const [, setTick] = useState(0);
   const forceRefresh = () => setTick((n) => n + 1);
+
+  const visibleDays = weekDates.length;
+  const prevDates = weekDates.map((d) => offsetDate(d, -visibleDays));
+  const nextDates = weekDates.map((d) => offsetDate(d, visibleDays));
+
+  const [panelWidth, setPanelWidth] = useState(0);
+  const panelWidthRef = useRef(0);
+  const dragX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: (INITIAL_SCROLL_HOUR - START_HOUR) * HOUR_HEIGHT, animated: false });
@@ -107,73 +117,140 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     forceRefresh();
   };
 
-  return (
-    <View style={styles.wrap}>
-      {/* 요일 + 날짜 헤더 */}
-      <View style={styles.dateHeaderRow}>
-        <View style={{ width: LABEL_WIDTH }} />
-        {weekDates.map((d) => {
-          const isToday = d === today;
-          const isSelected = d === selectedDate;
-          const dow = dowIndex(d);
-          const weekendColor = dow === 6 ? '#E5484D' : dow === 5 ? '#2170D8' : undefined;
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onUpdate((e) => { dragX.setValue(e.translationX); })
+    .onEnd((e) => {
+      const width = panelWidthRef.current || 1;
+      const forward = e.translationX < -width * 0.25 || (e.translationX < -30 && e.velocityX < -600);
+      const backward = e.translationX > width * 0.25 || (e.translationX > 30 && e.velocityX > 600);
+      if (forward) {
+        Animated.timing(dragX, { toValue: -width, duration: 200, useNativeDriver: true }).start(() => {
+          dragX.setValue(0);
+          onNavigate(visibleDays);
+        });
+      } else if (backward) {
+        Animated.timing(dragX, { toValue: width, duration: 200, useNativeDriver: true }).start(() => {
+          dragX.setValue(0);
+          onNavigate(-visibleDays);
+        });
+      } else {
+        Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+      }
+    });
 
-          return (
-            <Pressable key={d} style={styles.dateHeaderCol} onPress={() => onSelectDate(d)}>
-              <Text style={[styles.dowText, weekendColor && { color: weekendColor }]}>{DOW_LABELS[dow]}</Text>
-              <View style={[styles.dateCircle, isSelected && { backgroundColor: pointColor }]}>
-                <Text style={[
-                  styles.dateNumText,
-                  weekendColor && { color: weekendColor },
-                  isToday && !isSelected && { color: pointColor, fontWeight: '800' },
-                  isSelected && styles.dateNumTextSel,
-                ]}>
-                  {parseInt(d.slice(8), 10)}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
+  const carouselTransform = { transform: [{ translateX: Animated.subtract(dragX, panelWidth) }] };
 
-      {/* 시간대별 그리드 */}
-      <View ref={bodyRef} style={styles.body} collapsable={false}>
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scroll}
-          contentContainerStyle={{ height: totalHeight }}
-          onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
-          scrollEventThrottle={16}
-        >
-          <View style={[styles.gridRow, { height: totalHeight }]}>
-            <View style={[styles.hourGutter, { width: LABEL_WIDTH, height: totalHeight }]}>
-              {hours.map((h) => (
-                <Text key={h} style={[styles.hourLabel, { top: h * HOUR_HEIGHT - 6 }]}>{pad(h)}</Text>
-              ))}
+  const renderHeaderPanel = (dates: string[], key: string) => (
+    <View key={key} style={{ width: panelWidth, flexDirection: 'row' }}>
+      {dates.map((d) => {
+        const isToday = d === today;
+        const isSelected = d === selectedDate;
+        const dow = dowIndex(d);
+        const weekendColor = dow === 6 ? '#E5484D' : dow === 5 ? '#2170D8' : undefined;
+        return (
+          <Pressable key={d} style={styles.dateHeaderCol} onPress={() => onSelectDate(d)}>
+            <Text style={[styles.dowText, weekendColor && { color: weekendColor }]}>{DOW_LABELS[dow]}</Text>
+            <View style={[styles.dateCircle, isSelected && { backgroundColor: pointColor }]}>
+              <Text style={[
+                styles.dateNumText,
+                weekendColor && { color: weekendColor },
+                isToday && !isSelected && { color: pointColor, fontWeight: '800' },
+                isSelected && styles.dateNumTextSel,
+              ]}>
+                {parseInt(d.slice(8), 10)}
+              </Text>
             </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 
-            {weekDates.map((d) => (
-              <DayColumn
-                key={d}
-                date={d}
-                hours={hours}
-                isToday={d === today}
-                pointColor={pointColor}
-                priorityColor={PRIORITY_COLOR}
-                onCreateRange={onCreateRange}
-                onEditItem={onEditItem}
-                onToggle={handleToggle}
-                pending={pendingRange && pendingRange.date === d ? pendingRange : null}
-                onItemDragStart={onItemDragStart}
-                onItemDragUpdate={onItemDragUpdate}
-                onItemDragEnd={onItemDragEnd}
-                draggingId={draggingId}
-                dropPreview={dropPreview && dropPreview.date === d ? { time: dropPreview.time, durationMin: dropPreview.durationMin } : null}
-              />
-            ))}
+  return (
+    <View
+      style={styles.wrap}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width - LABEL_WIDTH;
+        panelWidthRef.current = w;
+        setPanelWidth(w);
+      }}
+    >
+      <GestureDetector gesture={swipeGesture}>
+        <View style={{ flex: 1 }}>
+          {/* 요일 + 날짜 헤더 */}
+          <View style={styles.dateHeaderRow}>
+            <View style={{ width: LABEL_WIDTH }} />
+            <View style={{ flex: 1, overflow: 'hidden' }}>
+              {panelWidth > 0 && (
+                <Animated.View style={[{ flexDirection: 'row' }, carouselTransform]}>
+                  {renderHeaderPanel(prevDates, 'prev')}
+                  {renderHeaderPanel(weekDates, 'current')}
+                  {renderHeaderPanel(nextDates, 'next')}
+                </Animated.View>
+              )}
+            </View>
           </View>
-        </ScrollView>
-      </View>
+
+          {/* 시간대별 그리드 */}
+          <View ref={bodyRef} style={styles.body} collapsable={false}>
+            <ScrollView
+              ref={scrollRef}
+              style={styles.scroll}
+              contentContainerStyle={{ height: totalHeight }}
+              onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+              scrollEventThrottle={16}
+            >
+              <View style={[styles.gridRow, { height: totalHeight }]}>
+                <View style={[styles.hourGutter, { width: LABEL_WIDTH, height: totalHeight }]}>
+                  {hours.map((h) => (
+                    <Text key={h} style={[styles.hourLabel, { top: h * HOUR_HEIGHT - 6 }]}>{pad(h)}</Text>
+                  ))}
+                </View>
+
+                <View style={{ flex: 1, overflow: 'hidden', height: totalHeight }}>
+                  {panelWidth > 0 && (
+                    <Animated.View style={[{ flexDirection: 'row', height: totalHeight }, carouselTransform]}>
+                      <View key="prev" style={{ width: panelWidth, flexDirection: 'row', height: totalHeight }}>
+                        {prevDates.map((d) => (
+                          <DayColumnPreview key={d} date={d} hours={hours} isToday={d === today} pointColor={pointColor} priorityColor={PRIORITY_COLOR} />
+                        ))}
+                      </View>
+                      <View key="current" style={{ width: panelWidth, flexDirection: 'row', height: totalHeight }}>
+                        {weekDates.map((d) => (
+                          <DayColumn
+                            key={d}
+                            date={d}
+                            hours={hours}
+                            isToday={d === today}
+                            pointColor={pointColor}
+                            priorityColor={PRIORITY_COLOR}
+                            onCreateRange={onCreateRange}
+                            onEditItem={onEditItem}
+                            onToggle={handleToggle}
+                            pending={pendingRange && pendingRange.date === d ? pendingRange : null}
+                            onItemDragStart={onItemDragStart}
+                            onItemDragUpdate={onItemDragUpdate}
+                            onItemDragEnd={onItemDragEnd}
+                            draggingId={draggingId}
+                            dropPreview={dropPreview && dropPreview.date === d ? { time: dropPreview.time, durationMin: dropPreview.durationMin } : null}
+                          />
+                        ))}
+                      </View>
+                      <View key="next" style={{ width: panelWidth, flexDirection: 'row', height: totalHeight }}>
+                        {nextDates.map((d) => (
+                          <DayColumnPreview key={d} date={d} hours={hours} isToday={d === today} pointColor={pointColor} priorityColor={PRIORITY_COLOR} />
+                        ))}
+                      </View>
+                    </Animated.View>
+                  )}
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </GestureDetector>
     </View>
   );
 });
@@ -182,6 +259,39 @@ export default WeekTimeGridView;
 
 function withTint(color: string) {
   return `${color}0D`;
+}
+
+function DayColumnPreview({ date, hours, isToday, pointColor, priorityColor }: {
+  date: string; hours: number[]; isToday: boolean; pointColor: string; priorityColor: Record<Priority, string>;
+}) {
+  const dayMissions = getMissions(date).filter((m) => !!m.start_time);
+  return (
+    <View style={[styles.dayCol, isToday && { backgroundColor: withTint(pointColor) }]}>
+      {hours.map((h) => (
+        <View key={h} style={[styles.hourLine, { top: h * HOUR_HEIGHT }]} />
+      ))}
+      {dayMissions.map((item) => {
+        const startMin = toMinutes(item.start_time!);
+        const endMin = item.end_time ? toMinutes(item.end_time) : startMin + DEFAULT_DURATION_MIN;
+        const top = (startMin - START_HOUR * 60) / 60 * HOUR_HEIGHT;
+        const height = Math.max((endMin - startMin) / 60 * HOUR_HEIGHT, MIN_BLOCK_HEIGHT);
+        const color = priorityColor[item.priority];
+        const done = item.done === 1;
+        return (
+          <View key={item.id} style={[styles.block, { top, height, borderLeftColor: color }]}>
+            <View style={styles.blockCheckbox}>
+              <View style={[styles.checkDot, done && { backgroundColor: color, borderColor: color }]}>
+                {done && <IconCheck size={7} color="#fff" />}
+              </View>
+            </View>
+            <Text numberOfLines={height < 30 ? 1 : 2} style={[styles.blockTitle, done && styles.blockTitleDone]}>
+              {item.title}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 function DayColumn({
