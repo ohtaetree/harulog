@@ -148,39 +148,35 @@ function CategoriesSub({ onBack }: { onBack: () => void }) {
 
         <View style={styles.catListWrap}>
           {categories.map((c) => (
-            <View key={c} style={styles.catListRow}>
-              <View style={styles.catListIconWrap}>
-                {(() => { const Icon = getCategoryIconByKey(categoryMeta[c]?.icon); return <Icon size={16} color={categoryMeta[c]?.color ?? Colors.textSecondary} />; })()}
+            <View key={c}>
+              <View style={styles.catListRow}>
+                <View style={styles.catListIconWrap}>
+                  {(() => { const Icon = getCategoryIconByKey(categoryMeta[c]?.icon); return <Icon size={16} color={categoryMeta[c]?.color ?? Colors.textSecondary} />; })()}
+                </View>
+                <Text style={styles.catListLabel}>{c}</Text>
+                <Pressable onPress={() => { const meta = categoryMeta[c] ?? { color: '#6B6B6B', icon: 'tag' as CategoryIconKey }; setEditing(c); setEditName(c); setEditColor(meta.color); setEditIcon(meta.icon); }} hitSlop={12} style={styles.categoryAction}><IconPencil size={18} color={Colors.textSecondary} /></Pressable>
+                <Pressable onPress={() => removeCategory(c)} hitSlop={12} style={styles.categoryAction}><IconClose size={18} color={Colors.textMuted} /></Pressable>
               </View>
-              <Text style={styles.catListLabel}>{c}</Text>
-              <Pressable onPress={() => {
-                const meta = categoryMeta[c] ?? { color: '#6B6B6B', icon: 'tag' as CategoryIconKey };
-                setEditing(c); setEditName(c); setEditColor(meta.color); setEditIcon(meta.icon);
-              }} hitSlop={12} style={styles.categoryAction}><IconPencil size={18} color={Colors.textSecondary} /></Pressable>
-              <Pressable onPress={() => removeCategory(c)} hitSlop={10}>
-                <IconClose size={18} color={Colors.textMuted} />
-              </Pressable>
+              {editing === c && (
+                <View style={styles.inlineEditor}>
+                  <Text style={styles.editorLabel}>이름</Text>
+                  <TextInput style={styles.editorInput} value={editName} onChangeText={setEditName} maxLength={20} />
+                  <Text style={styles.editorLabel}>색상</Text>
+                  <View style={styles.swatchGrid}>{POINT_COLOR_PRESETS.map((p) => <Pressable key={p.value} onPress={() => setEditColor(p.value)} style={[styles.editSwatch, { backgroundColor: p.value }, editColor === p.value && styles.editSwatchSelected]} />)}</View>
+                  <Text style={styles.editorLabel}>아이콘</Text>
+                  <View style={styles.iconChoiceRow}>{ICONS.map(({ key, Icon }) => <Pressable key={key} onPress={() => setEditIcon(key)} style={[styles.iconChoice, editIcon === key && { borderColor: editColor, borderWidth: 2 }]}><Icon size={18} color={editColor} /></Pressable>)}</View>
+                  <View style={styles.editorActions}>
+                    <Pressable onPress={() => setEditing(null)} style={styles.editorCancel}><Text style={styles.editorCancelText}>취소</Text></Pressable>
+                    <Pressable style={[styles.editorSave, { backgroundColor: editColor }]} onPress={() => { updateCategory(c, editName, { color: editColor, icon: editIcon }); setEditing(null); }}><Text style={styles.saveCategoryText}>저장</Text></Pressable>
+                  </View>
+                </View>
+              )}
             </View>
           ))}
           {categories.length === 0 && (
             <Text style={styles.desc}>카테고리가 없어요. 아래에서 추가해보세요.</Text>
           )}
         </View>
-
-        {editing && (
-          <View style={s.card}>
-            <TextInput style={styles.addCatInput} value={editName} onChangeText={setEditName} maxLength={20} />
-            <View style={styles.swatchGrid}>{POINT_COLOR_PRESETS.map((p) => (
-              <Pressable key={p.value} onPress={() => setEditColor(p.value)} style={[styles.editSwatch, { backgroundColor: p.value }, editColor === p.value && styles.editSwatchSelected]} />
-            ))}</View>
-            <View style={styles.iconChoiceRow}>{ICONS.map(({ key, Icon }) => (
-              <Pressable key={key} onPress={() => setEditIcon(key)} style={[styles.iconChoice, editIcon === key && { borderColor: editColor }]}><Icon size={17} color={editColor} /></Pressable>
-            ))}</View>
-            <Pressable style={[styles.saveCategoryBtn, { backgroundColor: editColor }]} onPress={() => { updateCategory(editing, editName, { color: editColor, icon: editIcon }); setEditing(null); }}>
-              <Text style={styles.saveCategoryText}>카테고리 저장</Text>
-            </Pressable>
-          </View>
-        )}
 
       </ScrollView>
     </View>
@@ -351,6 +347,13 @@ const styles = StyleSheet.create({
   },
   catListLabel: { flex: 1, fontSize: 15, color: Colors.textPrimary, fontWeight: '600' },
   categoryAction: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: Colors.surface },
+  inlineEditor: { marginTop: 4, marginBottom: 8, padding: 14, borderRadius: 14, backgroundColor: Colors.surface, gap: 9 },
+  editorLabel: { fontSize: 11, fontWeight: '700', color: Colors.textMuted },
+  editorInput: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.textPrimary },
+  editorActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  editorCancel: { flex: 1, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 10, backgroundColor: Colors.background },
+  editorCancelText: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
+  editorSave: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   addCatRow: { flexDirection: 'row', gap: 10 },
   addCatInput: {
     flex: 1, borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
