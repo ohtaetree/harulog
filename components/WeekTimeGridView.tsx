@@ -10,7 +10,7 @@ import { DOW_LABELS, todayStr, dowIndex, offsetDate } from '../utils/dateUtils';
 const START_HOUR = 0;
 const END_HOUR = 24;
 const HOUR_HEIGHT = 48;
-const LABEL_WIDTH = 30;
+const LABEL_WIDTH = 48;
 const DEFAULT_DURATION_MIN = 30;
 const MIN_BLOCK_HEIGHT = 20;
 const INITIAL_SCROLL_HOUR = 6;
@@ -138,9 +138,20 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const lastMoveRef = useRef<{ x: number; t: number } | null>(null);
   const swipeModeRef = useRef<'undecided' | 'horizontal' | 'rejected'>('undecided');
 
+  const settle = (toValue: number, distance: number, onDone?: () => void) => {
+    Animated.timing(dragX, {
+      toValue,
+      duration: Math.max(140, Math.min(280, 140 + Math.abs(distance) * 0.45)),
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) onDone?.();
+    });
+  };
+
   const commitOrSpringBack = (dx: number, velocityX: number) => {
     if (!dayWidth) {
-      Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+      settle(0, dx);
       return;
     }
     const effective = dx + velocityX * FLING_SECONDS;
@@ -148,16 +159,11 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     deltaDays = Math.max(-BUFFER_DAYS, Math.min(BUFFER_DAYS, deltaDays));
 
     if (deltaDays === 0) {
-      Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
+      settle(0, dx);
       return;
     }
     const finalX = -deltaDays * dayWidth;
-    Animated.timing(dragX, {
-      toValue: finalX,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => {
+    settle(finalX, finalX - dx, () => {
       dragX.setValue(0);
       onNavigate(deltaDays);
     });
@@ -283,7 +289,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
           <View style={[styles.gridRow, { height: totalHeight }]}>
             <View style={[styles.hourGutter, { width: LABEL_WIDTH, height: totalHeight }]}>
               {hours.map((h) => (
-                <Text key={h} style={[styles.hourLabel, { top: h * HOUR_HEIGHT - 6 }]}>{pad(h)}</Text>
+                <Text key={h} style={[styles.hourLabel, { top: h * HOUR_HEIGHT - 7 }]}>{`${pad(h)}:00`}</Text>
               ))}
             </View>
 
@@ -532,8 +538,8 @@ const styles = StyleSheet.create({
 
   hourGutter: { position: 'relative' },
   hourLabel: {
-    position: 'absolute', left: 0, right: 4,
-    fontSize: 9, color: Colors.textMuted, fontWeight: '600', textAlign: 'right',
+    position: 'absolute', left: 0, right: 6,
+    fontSize: 10, color: Colors.textMuted, fontWeight: '500', textAlign: 'right',
   },
 
   dayCol: {

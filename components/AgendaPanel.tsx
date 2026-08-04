@@ -5,7 +5,6 @@ import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
 import { IconCheck, IconClose, IconPerson, IconPlus, IconChevronUp } from './icons';
 import { MissionRow } from '../db/missionDb';
-import { labelFullDate } from '../utils/dateUtils';
 
 export const HANDLE_HEIGHT = 46;
 export const PANEL_HEIGHT_RATIO = 1 / 3;
@@ -156,7 +155,7 @@ export default function AgendaPanel({
         <View style={styles.handleArea}>
           <View style={styles.handleBar} />
           <View style={styles.handleRow}>
-            <Text style={styles.handleLabel} numberOfLines={1}>{labelFullDate(date)}</Text>
+            <Text style={styles.handleLabel}>일정</Text>
             <Animated.View style={{
               transform: [{ rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }],
             }}>
@@ -198,7 +197,7 @@ export default function AgendaPanel({
         ))}
 
         {missions.length === 0 && (
-          <Text style={styles.empty}>일정이 없어요</Text>
+          <Text style={styles.empty}>예정된 일정이 없어요</Text>
         )}
       </ScrollView>
 

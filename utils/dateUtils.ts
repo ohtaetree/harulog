@@ -68,12 +68,12 @@ export function labelDay(date: string): string {
 
 export function labelWeek(date: string): string {
   const d = new Date(date + 'T00:00:00');
-  return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export function labelMonth(date: string): string {
   const d = new Date(date + 'T00:00:00');
-  return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /** Mon=0 .. Sun=6, matching DOW_LABELS order (unlike Date#getDay's Sun=0) */

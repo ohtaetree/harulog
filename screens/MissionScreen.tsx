@@ -195,6 +195,7 @@ function AddEditModal({ visible, initial, presetStartTime, presetEndTime, preset
 
 export default function MissionScreen() {
   const { date, missions, loadDate, add, update, toggle, remove } = useMissionStore();
+  const pointColor = usePointColor();
   const categories = useSettingsStore((s) => s.categories);
   const weekVisibleDays = useSettingsStore((s) => s.weekVisibleDays);
   const viewMode = useSettingsStore((s) => s.scheduleViewMode);
@@ -222,6 +223,11 @@ export default function MissionScreen() {
   }, [viewMode]);
 
   const weekDates = useMemo(() => getDateRange(weekAnchor, weekVisibleDays), [weekAnchor, weekVisibleDays]);
+  const today = todayStr();
+  const goToToday = () => {
+    navigate(today);
+    setWeekAnchor(today);
+  };
 
   const makeSnapSwipeGesture = (onPrev: () => void, onNext: () => void) => Gesture.Pan()
     .activeOffsetX([-20, 20])
@@ -345,6 +351,10 @@ export default function MissionScreen() {
             <Pressable onPress={() => setSettingsVisible(true)} style={styles.iconBtn}>
               <IconSettings size={17} color={Colors.textPrimary} />
             </Pressable>
+
+            <Pressable onPress={goToToday} style={[styles.todayBtn, { backgroundColor: pointColor }]}>
+              <Text style={styles.todayBtnText}>{String(parseInt(today.slice(8), 10))}</Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -455,6 +465,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
+  todayBtn: {
+    minWidth: 32, height: 32, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 7,
+  },
+  todayBtnText: { fontSize: 14, fontWeight: '800', color: '#fff' },
 
   weekBody: { flex: 1 },
 
