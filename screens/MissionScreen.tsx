@@ -226,7 +226,8 @@ export default function MissionScreen() {
   const today = todayStr();
   const goToToday = () => {
     setWeekAnchor(today);
-    navigate(today);
+    // 지연되는 페이드 내비게이션을 거치지 않아, 오늘이 즉시 왼쪽 첫 칸으로 배치된다.
+    loadDate(today);
   };
 
   const makeSnapSwipeGesture = (onPrev: () => void, onNext: () => void) => Gesture.Pan()
@@ -316,7 +317,10 @@ export default function MissionScreen() {
 
     if (droppedOnDrawer) return;
     gridRef.current?.getDropTarget(x, y, (target) => {
-      if (target) update(item.id, item.title, item.priority, item.category, target.time, null, target.date);
+      if (!target) return;
+      const endTime = minutesToTimeStr(timeToMinutes(target.time) + dragDurationRef.current);
+      update(item.id, item.title, item.priority, item.category, target.time, endTime, target.date);
+      loadDate(target.date);
     });
   };
 

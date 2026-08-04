@@ -76,6 +76,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const scrollRef = useRef<any>(null);
   const bodyRef = useRef<View>(null);
   const scrollOffsetRef = useRef(0);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [, setTick] = useState(0);
   const forceRefresh = () => setTick((n) => n + 1);
 
@@ -120,6 +121,12 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const handleToggle = (item: MissionRow) => {
     toggleMission(item.id, item.done === 0);
     forceRefresh();
+  };
+
+  const setVerticalScrollLocked = (locked: boolean) => {
+    const enabled = !locked;
+    scrollRef.current?.setNativeProps?.({ scrollEnabled: enabled });
+    setScrollEnabled(enabled);
   };
 
   // 그리드 본문 스와이프 — RNGH 제스처 대신 RN 기본 터치 이벤트(onTouch*)로 직접 처리한다.
@@ -196,6 +203,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
         && Math.abs(dx) >= Math.abs(dy) * HORIZONTAL_DOMINANCE
       ) {
         swipeModeRef.current = 'horizontal';
+        setVerticalScrollLocked(true);
       } else if (
         Math.abs(dy) >= VERTICAL_MOVE_THRESHOLD
         && Math.abs(dy) > Math.abs(dx) / HORIZONTAL_DOMINANCE
@@ -216,6 +224,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     const mode = swipeModeRef.current;
     touchStartRef.current = null;
     swipeModeRef.current = 'undecided';
+    setVerticalScrollLocked(false);
     if (mode !== 'horizontal' || !start) return;
 
     const t = e.nativeEvent.changedTouches?.[0];
@@ -284,12 +293,15 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
           ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={{ height: totalHeight }}
+          scrollEnabled={scrollEnabled}
+          bounces={false}
+          overScrollMode="never"
           onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
         >
           <View style={[styles.gridRow, { height: totalHeight }]}>
             <View style={[styles.hourGutter, { width: LABEL_WIDTH, height: totalHeight }]}>
-              {hours.map((h) => (
+              {hours.filter((h) => h > 0).map((h) => (
                 <Text key={h} style={[styles.hourLabel, { top: h * HOUR_HEIGHT - 7 }]}>{`${pad(h)}:00`}</Text>
               ))}
             </View>
@@ -316,6 +328,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
                         onItemDragUpdate={onItemDragUpdate}
                         onItemDragEnd={onItemDragEnd}
                         draggingId={draggingId}
+                        onGestureActive={setVerticalScrollLocked}
                         dropPreview={dropPreview && dropPreview.date === d ? { time: dropPreview.time, durationMin: dropPreview.durationMin } : null}
                       />
                     ) : (
@@ -373,7 +386,7 @@ function DayColumnPreview({ date, width, hours, isToday, pointColor, priorityCol
 
 function DayColumn({
   date, width, hours, isToday, pointColor, priorityColor, onCreateRange, onEditItem, onToggle, pending,
-  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview,
+  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview, onGestureActive,
 }: {
   date: string; width: number; hours: number[]; isToday: boolean; pointColor: string;
   priorityColor: Record<Priority, string>;
@@ -386,6 +399,7 @@ function DayColumn({
   onItemDragEnd: (item: MissionRow, x: number, y: number) => void;
   draggingId: number | null;
   dropPreview: { time: string; durationMin: number } | null;
+  onGestureActive: (active: boolean) => void;
 }) {
   const dayMissions = getMissions(date).filter((m) => !!m.start_time);
 
@@ -398,13 +412,17 @@ function DayColumn({
 
   const createGesture = Gesture.Pan()
     .activateAfterLongPress(260)
-    .onStart((e) => setDragRange({ startY: e.y, endY: e.y }))
+    .onStart((e) => {
+      onGestureActive(true);
+      setDragRange({ startY: e.y, endY: e.y });
+    })
     .onUpdate((e) => {
       const r = dragRangeRef.current;
       if (r) setDragRange({ ...r, endY: e.y });
     })
     .onFinalize((_e, success) => {
       const r = dragRangeRef.current;
+      onGestureActive(false);
       setDragRange(null);
       if (r && success) {
         const top = Math.min(r.startY, r.endY);
@@ -478,6 +496,7 @@ function DayColumn({
             onDragStart={onItemDragStart}
             onDragUpdate={onItemDragUpdate}
             onDragEnd={onItemDragEnd}
+            onGestureActive={onGestureActive}
           />
         );
       })}
@@ -485,12 +504,13 @@ function DayColumn({
   );
 }
 
-function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onToggle, onDragStart, onDragUpdate, onDragEnd }: {
+function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onToggle, onDragStart, onDragUpdate, onDragEnd, onGestureActive }: {
   item: MissionRow; top: number; height: number; color: string; done: boolean; dragging: boolean;
   onEdit: () => void; onToggle: () => void;
   onDragStart: (item: MissionRow, x: number, y: number) => void;
   onDragUpdate: (x: number, y: number) => void;
   onDragEnd: (item: MissionRow, x: number, y: number) => void;
+  onGestureActive: (active: boolean) => void;
 }) {
   const tapGesture = Gesture.Tap()
     .maxDuration(240)
@@ -498,9 +518,15 @@ function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onTo
 
   const dragGesture = Gesture.Pan()
     .activateAfterLongPress(260)
-    .onStart((e) => onDragStart(item, e.absoluteX, e.absoluteY))
+    .onStart((e) => {
+      onGestureActive(true);
+      onDragStart(item, e.absoluteX, e.absoluteY);
+    })
     .onUpdate((e) => onDragUpdate(e.absoluteX, e.absoluteY))
-    .onFinalize((e) => onDragEnd(item, e.absoluteX, e.absoluteY));
+    .onFinalize((e) => {
+      onGestureActive(false);
+      onDragEnd(item, e.absoluteX, e.absoluteY);
+    });
 
   const blockGesture = Gesture.Race(tapGesture, dragGesture);
 
