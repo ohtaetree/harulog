@@ -14,6 +14,14 @@ const CATEGORY_ICON_MAP: Record<string, IconComponent> = {
   '기타': IconTag,
 };
 
+const ICON_KEY_MAP: Record<string, IconComponent> = {
+  person: IconPerson, briefcase: IconBriefcase, medical: IconMedical, pencil: IconPencil, home: IconHome, tag: IconTag,
+};
+
 export function getCategoryIcon(category: string): IconComponent {
   return CATEGORY_ICON_MAP[category] ?? IconTag;
+}
+
+export function getCategoryIconByKey(icon?: string): IconComponent {
+  return ICON_KEY_MAP[icon ?? ''] ?? IconTag;
 }

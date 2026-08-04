@@ -3,6 +3,8 @@ import { View, Text, Pressable, StyleSheet, Animated, Dimensions } from 'react-n
 import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
+import { useSettingsStore } from '../stores/settingsStore';
+import { getCategoryIconByKey } from '../utils/categoryIcon';
 import { IconCheck, IconClose, IconPerson, IconPlus, IconChevronUp } from './icons';
 import { MissionRow } from '../db/missionDb';
 
@@ -38,10 +40,12 @@ function buildCategorySections(missions: MissionRow[], categories: string[]): Ca
 
 function CategoryHeader({ label, onAdd }: { label: string; onAdd?: () => void }) {
   const pointColor = usePointColor();
+  const meta = useSettingsStore((s) => s.categoryMeta[label]);
+  const Icon = getCategoryIconByKey(meta?.icon);
   return (
     <View style={styles.catPill}>
       <View style={styles.catPillIconWrap}>
-        <IconPerson size={13} color={Colors.textSecondary} />
+        <Icon size={13} color={meta?.color ?? Colors.textSecondary} />
       </View>
       <Text style={styles.catPillLabel}>{label}</Text>
       {onAdd && (
@@ -72,13 +76,11 @@ function TodoRow({ item, dragging, draggable, onToggle, onDelete, onEdit, onDrag
     onToggle();
   };
 
-  const tapGesture = Gesture.Tap().maxDuration(240).onEnd(() => onEdit());
   const dragGesture = Gesture.Pan()
     .activateAfterLongPress(260)
     .onStart((e) => onDragStart?.(item, e.absoluteX, e.absoluteY))
     .onUpdate((e) => onDragUpdate?.(e.absoluteX, e.absoluteY))
     .onFinalize((e) => onDragEnd?.(item, e.absoluteX, e.absoluteY));
-  const rowGesture = Gesture.Race(tapGesture, dragGesture);
 
   const body = (
     <Animated.View style={[styles.todoRow, dragging && styles.todoRowDragging, { transform: [{ scale }] }]}>
@@ -87,9 +89,9 @@ function TodoRow({ item, dragging, draggable, onToggle, onDelete, onEdit, onDrag
           {done && <IconCheck size={13} color="#fff" />}
         </View>
       </Pressable>
-      <View style={styles.todoBody}>
+      <Pressable style={styles.todoBody} onPress={onEdit}>
         <Text style={[styles.todoTitle, done && styles.todoTitleDone]} numberOfLines={2}>{item.title}</Text>
-      </View>
+      </Pressable>
       <Pressable onPress={onDelete} hitSlop={10}>
         <IconClose size={13} color={Colors.textMuted} />
       </Pressable>
@@ -100,7 +102,7 @@ function TodoRow({ item, dragging, draggable, onToggle, onDelete, onEdit, onDrag
     return <Pressable onPress={onEdit}>{body}</Pressable>;
   }
 
-  return <GestureDetector gesture={rowGesture}>{body}</GestureDetector>;
+  return <GestureDetector gesture={dragGesture}>{body}</GestureDetector>;
 }
 
 interface Props {

@@ -354,6 +354,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
                 </Animated.View>
               )}
             </View>
+            <View pointerEvents="none" style={[styles.nowLine, { top: (nowMinutes / 60) * HOUR_HEIGHT, backgroundColor: pointColor }]} />
           </View>
         </ScrollView>
       </View>
@@ -452,7 +453,6 @@ function DayColumn({
       {hours.map((h) => (
         <View key={h} style={[styles.hourLine, { top: h * HOUR_HEIGHT }]} />
       ))}
-      {isToday && <View pointerEvents="none" style={[styles.nowLine, { top: (nowMinutes / 60) * HOUR_HEIGHT }]} />}
 
       <Pressable
         style={StyleSheet.absoluteFill}
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   hourLine: {
     position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: Colors.border,
   },
-  nowLine: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: '#E5484D', zIndex: 5 },
+  nowLine: { position: 'absolute', left: 0, right: 0, height: 2, zIndex: 5 },
 
   dragPreview: {
     position: 'absolute', left: 1, right: 1,
