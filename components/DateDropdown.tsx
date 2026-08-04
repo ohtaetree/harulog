@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useState } from 'react';
 import { View, Text, Modal, Pressable, StyleSheet } from 'react-native';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
-import { IconChevronLeft, IconChevronRight, IconChevronDown } from './icons';
+import { IconChevronLeft, IconChevronRight } from './icons';
 import {
   labelMonth,
   getCalendarDates, getMonthFirst, offsetMonth,
@@ -48,10 +48,7 @@ const DateDropdown = forwardRef<DateDropdownHandle, Props>(({ date, label, onApp
 
   return (
     <>
-      <Pressable onPress={open} style={styles.chip} hitSlop={8}>
-        <Text style={styles.chipText}>{label}</Text>
-        <IconChevronDown size={14} color={Colors.textSecondary} />
-      </Pressable>
+      <Text style={styles.label}>{label}</Text>
 
       <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
         <Pressable style={styles.backdrop} onPress={() => setVisible(false)} />
@@ -112,13 +109,7 @@ const DateDropdown = forwardRef<DateDropdownHandle, Props>(({ date, label, onApp
 export default DateDropdown;
 
 const styles = StyleSheet.create({
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, backgroundColor: Colors.surface,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  chipText: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  label: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.3 },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
   panel: {

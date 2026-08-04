@@ -2,7 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
-import { IconCheck } from './icons';
+import { IconCheck, IconPlus } from './icons';
 import { MissionRow } from '../db/missionDb';
 import { labelFullDate } from '../utils/dateUtils';
 
@@ -10,9 +10,10 @@ interface Props {
   date: string;
   missions: MissionRow[];
   onEditItem: (item: MissionRow) => void;
+  onAdd: () => void;
 }
 
-export default function DayAgendaPanel({ date, missions, onEditItem }: Props) {
+export default function DayAgendaPanel({ date, missions, onEditItem, onAdd }: Props) {
   const pointColor = usePointColor();
   const timed = missions
     .filter((m) => !!m.start_time)
@@ -45,6 +46,11 @@ export default function DayAgendaPanel({ date, missions, onEditItem }: Props) {
           <Text style={styles.empty}>일정이 없어요</Text>
         )}
       </ScrollView>
+
+      <Pressable style={styles.addBtn} onPress={onAdd}>
+        <IconPlus size={15} color={Colors.textSecondary} />
+        <Text style={styles.addBtnText}>새로운 일정</Text>
+      </Pressable>
     </View>
   );
 }
@@ -77,4 +83,12 @@ const styles = StyleSheet.create({
   },
 
   empty: { fontSize: 12, color: Colors.textMuted, textAlign: 'center', paddingTop: 24 },
+
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginHorizontal: 16, marginBottom: 12,
+    paddingVertical: 11, borderRadius: 12,
+    borderWidth: 1.5, borderColor: Colors.border, borderStyle: 'dashed',
+  },
+  addBtnText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
 });

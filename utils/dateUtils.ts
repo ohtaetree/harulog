@@ -33,19 +33,9 @@ export function getMonthFirst(date: string): string {
   return date.slice(0, 7) + '-01';
 }
 
-/** Returns Monday of the week containing date (ISO week: Mon=start) */
-export function getWeekStart(date: string): string {
-  const d = new Date(date + 'T00:00:00');
-  const dow = d.getDay(); // 0=Sun
-  const diff = dow === 0 ? -6 : 1 - dow;
-  d.setDate(d.getDate() + diff);
-  return toDateStr(d);
-}
-
-/** Returns 7 dates Mon–Sun of the week containing date */
-export function getWeekDates(date: string): string[] {
-  const monday = getWeekStart(date);
-  return Array.from({ length: 7 }, (_, i) => offsetDate(monday, i));
+/** Returns `count` consecutive dates starting at date (rolling window, not week-aligned) */
+export function getDateRange(date: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => offsetDate(date, i));
 }
 
 /** Returns 42 calendar grid cells for the month containing date */

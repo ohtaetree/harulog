@@ -12,13 +12,13 @@ import TimePickerModal from '../components/TimePickerModal';
 import WeekTimeGridView, { WeekTimeGridHandle } from '../components/WeekTimeGridView';
 import MonthCalendar from '../components/MonthCalendar';
 import DayAgendaPanel from '../components/DayAgendaPanel';
-import DisplayModePicker from '../components/DisplayModePicker';
 import TodoDrawer, { HANDLE_HEIGHT, DRAWER_HEIGHT_RATIO } from '../components/TodoDrawer';
-import { IconSliders, IconSearch, IconSettings } from '../components/icons';
+import SettingsScreen from './SettingsScreen';
+import { IconSearch, IconSettings } from '../components/icons';
 import { Colors } from '../constants/colors';
 import { useDateFade } from '../hooks/useDateFade';
 import { usePointColor } from '../hooks/usePointColor';
-import { todayStr, offsetDate, offsetMonth, getWeekDates, labelWeek, labelMonth } from '../utils/dateUtils';
+import { todayStr, offsetDate, offsetMonth, getDateRange, labelWeek, labelMonth } from '../utils/dateUtils';
 
 const PRIORITY_LABEL: Record<Priority, string> = { high: '높음', medium: '보통', low: '낮음' };
 
@@ -197,12 +197,9 @@ function AddEditModal({ visible, initial, presetStartTime, presetEndTime, preset
 export default function MissionScreen() {
   const { date, missions, loadDate, add, update, toggle, remove } = useMissionStore();
   const categories = useSettingsStore((s) => s.categories);
-  const dayDisplayMode = useSettingsStore((s) => s.dayDisplayMode);
-  const setDayDisplayMode = useSettingsStore((s) => s.setDayDisplayMode);
+  const weekVisibleDays = useSettingsStore((s) => s.weekVisibleDays);
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
-  const [displayPickerVisible, setDisplayPickerVisible] = useState(false);
-  const [displayPickerAnchor, setDisplayPickerAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const sliderBtnRef = useRef<View>(null);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const dateDropdownRef = useRef<DateDropdownHandle>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget,   setEditTarget]   = useState<MissionRow | undefined>();
@@ -215,22 +212,21 @@ export default function MissionScreen() {
 
   const { navigate } = useDateFade(loadDate);
 
-  const weekDates = useMemo(() => getWeekDates(date), [date]);
+  const weekDates = useMemo(() => getDateRange(date, weekVisibleDays), [date, weekVisibleDays]);
 
   const makeSwipeGesture = () => Gesture.Pan()
     .activeOffsetX([-20, 20])
     .failOffsetY([-15, 15])
     .onEnd((e) => {
       if (e.translationX < -40) {
-        navigate(viewMode === 'week' ? offsetDate(date, 7) : offsetMonth(date, 1));
+        navigate(viewMode === 'week' ? offsetDate(date, weekVisibleDays) : offsetMonth(date, 1));
       } else if (e.translationX > 40) {
-        navigate(viewMode === 'week' ? offsetDate(date, -7) : offsetMonth(date, -1));
+        navigate(viewMode === 'week' ? offsetDate(date, -weekVisibleDays) : offsetMonth(date, -1));
       }
     });
-  // 헤더는 두 뷰 모두 스와이프 가능. 주간 그리드 본문은 길게 눌러 드래그하는
-  // 기존 제스처(범위 생성/재배치)와 겹치지 않도록 스와이프를 헤더에만 둔다.
   const headerSwipeGesture = makeSwipeGesture();
   const monthSwipeGesture = makeSwipeGesture();
+  const weekSwipeGesture = makeSwipeGesture();
 
   const openAdd = (time?: string, category?: string, endTime?: string) => {
     setEditTarget(undefined); setPresetTime(time); setPresetEnd(endTime); setPresetCat(category); setModalVisible(true);
@@ -241,13 +237,6 @@ export default function MissionScreen() {
   const handleSave = (title: string, priority: Priority, category: string, startTime: string | null, endTime: string | null) => {
     if (editTarget) update(editTarget.id, title, priority, category, startTime, endTime);
     else add(title, priority, category, startTime, endTime);
-  };
-
-  const openDisplayPicker = () => {
-    sliderBtnRef.current?.measureInWindow((x, y, width, height) => {
-      setDisplayPickerAnchor({ x, y, width, height });
-      setDisplayPickerVisible(true);
-    });
   };
 
   const [todoOpen, setTodoOpen] = useState(false);
@@ -331,12 +320,6 @@ export default function MissionScreen() {
             </View>
 
             <View style={styles.headerRight}>
-              {viewMode === 'month' && (
-                <Pressable ref={sliderBtnRef} onPress={openDisplayPicker} style={styles.iconBtn}>
-                  <IconSliders size={16} color={Colors.textPrimary} />
-                </Pressable>
-              )}
-
               <Pressable
                 onPress={() => setViewMode((m) => (m === 'week' ? 'month' : 'week'))}
                 style={styles.viewToggle}>
@@ -347,7 +330,7 @@ export default function MissionScreen() {
                 <IconSearch size={17} color={Colors.textPrimary} />
               </Pressable>
 
-              <Pressable style={styles.iconBtn}>
+              <Pressable onPress={() => setSettingsVisible(true)} style={styles.iconBtn}>
                 <IconSettings size={17} color={Colors.textPrimary} />
               </Pressable>
             </View>
@@ -359,47 +342,49 @@ export default function MissionScreen() {
         <GestureDetector gesture={monthSwipeGesture}>
           <View style={styles.body}>
             <MonthCalendar date={date} selectedDate={date} onSelect={navigate} />
-            <DayAgendaPanel date={date} missions={missions} onEditItem={openEdit} />
+            <DayAgendaPanel date={date} missions={missions} onEditItem={openEdit} onAdd={() => openAdd()} />
           </View>
         </GestureDetector>
       ) : (
-        <View style={styles.body}>
-          <View style={styles.weekBody}>
-            <WeekTimeGridView
-              ref={gridRef}
-              weekDates={weekDates}
-              selectedDate={date}
-              onSelectDate={navigate}
-              onCreateRange={(d, start, end) => {
-                loadDate(d);
-                setPendingRange({ date: d, startTime: start, endTime: end });
-                openAdd(start, undefined, end);
-              }}
-              onEditItem={openEdit}
-              pendingRange={pendingRange}
-              onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
-              onItemDragUpdate={handleDragUpdate}
-              onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
-              draggingId={dragItem?.id ?? null}
-              dropPreview={dropPreview}
-            />
+        <GestureDetector gesture={weekSwipeGesture}>
+          <View style={styles.body}>
+            <View style={styles.weekBody}>
+              <WeekTimeGridView
+                ref={gridRef}
+                weekDates={weekDates}
+                selectedDate={date}
+                onSelectDate={navigate}
+                onCreateRange={(d, start, end) => {
+                  loadDate(d);
+                  setPendingRange({ date: d, startTime: start, endTime: end });
+                  openAdd(start, undefined, end);
+                }}
+                onEditItem={openEdit}
+                pendingRange={pendingRange}
+                onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
+                onItemDragUpdate={handleDragUpdate}
+                onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
+                draggingId={dragItem?.id ?? null}
+                dropPreview={dropPreview}
+              />
 
-            <TodoDrawer
-              expanded={todoOpen}
-              onToggle={() => setTodoOpen((v) => !v)}
-              missions={unscheduledItems}
-              categories={categories}
-              onAdd={(category) => openAdd(undefined, category)}
-              onToggleItem={toggle}
-              onDeleteItem={remove}
-              onEditItem={openEdit}
-              onItemDragStart={(item, x, y) => handleDragStart(item, 'drawer', x, y)}
-              onItemDragUpdate={handleDragUpdate}
-              onItemDragEnd={(item, x, y) => handleDragEnd(item, 'drawer', x, y)}
-              draggingId={dragItem?.id ?? null}
-            />
+              <TodoDrawer
+                expanded={todoOpen}
+                onToggle={() => setTodoOpen((v) => !v)}
+                missions={unscheduledItems}
+                categories={categories}
+                onAdd={(category) => openAdd(undefined, category)}
+                onToggleItem={toggle}
+                onDeleteItem={remove}
+                onEditItem={openEdit}
+                onItemDragStart={(item, x, y) => handleDragStart(item, 'drawer', x, y)}
+                onItemDragUpdate={handleDragUpdate}
+                onItemDragEnd={(item, x, y) => handleDragEnd(item, 'drawer', x, y)}
+                draggingId={dragItem?.id ?? null}
+              />
+            </View>
           </View>
-        </View>
+        </GestureDetector>
       )}
 
       {dragItem && (
@@ -419,13 +404,9 @@ export default function MissionScreen() {
         onSave={handleSave}
       />
 
-      <DisplayModePicker
-        visible={displayPickerVisible}
-        value={dayDisplayMode}
-        anchor={displayPickerAnchor}
-        onSelect={setDayDisplayMode}
-        onClose={() => setDisplayPickerVisible(false)}
-      />
+      <Modal visible={settingsVisible} animationType="slide" onRequestClose={() => setSettingsVisible(false)}>
+        <SettingsScreen onClose={() => setSettingsVisible(false)} />
+      </Modal>
     </SafeAreaView>
   );
 }

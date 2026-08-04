@@ -235,6 +235,16 @@ export function IconSettings({ size = 20, color = Colors.textPrimary }: IconProp
   );
 }
 
+export function IconColumns({ size = 20, color = Colors.textPrimary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3" y="4" width="18" height="16" rx="2.5" stroke={color} strokeWidth={STROKE} />
+      <Line x1="9" y1="4" x2="9" y2="20" stroke={color} strokeWidth={STROKE} />
+      <Line x1="15" y1="4" x2="15" y2="20" stroke={color} strokeWidth={STROKE} />
+    </Svg>
+  );
+}
+
 export function IconRefresh({ size = 20, color = Colors.textPrimary }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

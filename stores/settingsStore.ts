@@ -22,11 +22,15 @@ export const POINT_COLOR_PRESETS = [
 
 export type DayDisplayMode = 'icon' | 'icon-text' | 'text';
 
+export const MIN_WEEK_VISIBLE_DAYS = 3;
+export const MAX_WEEK_VISIBLE_DAYS = 7;
+
 interface Settings {
   onboardingDone: boolean;
   pointColor: string;
   categories: string[];
   dayDisplayMode: DayDisplayMode;
+  weekVisibleDays: number;
 }
 
 function loadSettings(): Settings {
@@ -42,11 +46,17 @@ function loadSettings(): Settings {
             ? parsed.categories : DEFAULT_CATEGORIES,
           dayDisplayMode: ['icon', 'icon-text', 'text'].includes(parsed.dayDisplayMode)
             ? parsed.dayDisplayMode : 'icon',
+          weekVisibleDays: Number.isInteger(parsed.weekVisibleDays)
+            && parsed.weekVisibleDays >= MIN_WEEK_VISIBLE_DAYS && parsed.weekVisibleDays <= MAX_WEEK_VISIBLE_DAYS
+            ? parsed.weekVisibleDays : 7,
         };
       }
     } catch {}
   }
-  return { onboardingDone: false, pointColor: DEFAULT_POINT_COLOR, categories: DEFAULT_CATEGORIES, dayDisplayMode: 'icon' };
+  return {
+    onboardingDone: false, pointColor: DEFAULT_POINT_COLOR, categories: DEFAULT_CATEGORIES,
+    dayDisplayMode: 'icon', weekVisibleDays: 7,
+  };
 }
 
 function saveSettings(s: Settings) {
@@ -62,6 +72,7 @@ interface SettingsState extends Settings {
   addCategory:        (name: string) => void;
   removeCategory:     (name: string) => void;
   setDayDisplayMode:  (mode: DayDisplayMode) => void;
+  setWeekVisibleDays: (days: number) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -101,6 +112,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setDayDisplayMode(mode) {
     const next: Settings = { ...get(), dayDisplayMode: mode };
+    saveSettings(next);
+    set(next);
+  },
+
+  setWeekVisibleDays(days) {
+    const clamped = Math.min(MAX_WEEK_VISIBLE_DAYS, Math.max(MIN_WEEK_VISIBLE_DAYS, Math.round(days)));
+    const next: Settings = { ...get(), weekVisibleDays: clamped };
     saveSettings(next);
     set(next);
   },
