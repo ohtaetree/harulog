@@ -9,7 +9,8 @@ import { DOW_LABELS, todayStr, dowIndex, offsetDate } from '../utils/dateUtils';
 
 const START_HOUR = 0;
 const END_HOUR = 24;
-const HOUR_HEIGHT = 48;
+// 시간표를 한 화면에서 더 촘촘하게 확인할 수 있도록 1시간 행 높이를 줄인다.
+const HOUR_HEIGHT = 36;
 const LABEL_WIDTH = 48;
 const DEFAULT_DURATION_MIN = 30;
 const MIN_BLOCK_HEIGHT = 20;

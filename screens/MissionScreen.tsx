@@ -225,8 +225,8 @@ export default function MissionScreen() {
   const weekDates = useMemo(() => getDateRange(weekAnchor, weekVisibleDays), [weekAnchor, weekVisibleDays]);
   const today = todayStr();
   const goToToday = () => {
-    navigate(today);
     setWeekAnchor(today);
+    navigate(today);
   };
 
   const makeSnapSwipeGesture = (onPrev: () => void, onNext: () => void) => Gesture.Pan()

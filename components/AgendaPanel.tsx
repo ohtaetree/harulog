@@ -201,10 +201,12 @@ export default function AgendaPanel({
         )}
       </ScrollView>
 
-      <Pressable style={styles.addBtn} onPress={() => onAdd()}>
-        <IconPlus size={15} color={Colors.textSecondary} />
-        <Text style={styles.addBtnText}>새로운 일정</Text>
-      </Pressable>
+      {expanded && (
+        <Pressable style={styles.addBtn} onPress={() => onAdd()}>
+          <IconPlus size={15} color={Colors.textSecondary} />
+          <Text style={styles.addBtnText}>새로운 일정</Text>
+        </Pressable>
+      )}
     </Animated.View>
   );
 }
