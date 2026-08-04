@@ -121,31 +121,28 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     forceRefresh();
   };
 
-  // 헤더 각 날짜 칸에 개별로 붙이는 스와이프+탭 제스처 — 그리드(스크롤뷰) 본문에는 걸지
-  // 않아서 위아래 스크롤과 절대 겹치지 않음. RN Pressable 대신 이 Pan 하나로 탭까지 같이
-  // 처리하는 이유: 웹에서 GestureDetector가 조상 뷰에 touch-action:none을 강제로 씌워서
-  // Pressable의 onPress(네이티브 click 합성 의존)가 막히고, Gesture.Tap을 Race로 같이 걸어도
-  // 인식이 불안정했음. activeOffsetX를 못 넘는 탭은 Pan이 활성화(success)되지 않으므로
-  // onFinalize의 success 플래그로 탭/스와이프를 구분해서 처리 (onEnd는 비활성 상태에서
-  // 안정적으로 호출되지 않는 것으로 확인됨).
-  const makeSwipePan = (date: string) => Gesture.Pan()
-    .activeOffsetX([-10, 10])
+  // 헤더 전체를 감싸는 스와이프 제스처(Pan만) — 그리드(스크롤뷰) 본문에는 걸지 않아서 위아래
+  // 스크롤과 겹치지 않음. 탭으로 날짜 선택은 아래 각 칸의 일반 Pressable이 그대로 담당 —
+  // MonthCalendar의 날짜 칸(조상 GestureDetector의 Pan과 중첩된 Pressable)이 실기기에서 문제
+  //없이 동작하는 것과 같은 패턴. 이전에 탭까지 이 Pan 하나로 처리하려던 시도는 실기기에서
+  // 탭 손뗄 때의 미세한 속도값이 스와이프로 오인되는 문제가 있어서 되돌림.
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([-15, 15])
     .onUpdate((e) => { dragX.setValue(e.translationX); })
-    .onFinalize((e, success) => {
-      if (!success) {
-        onSelectDate(date);
+    .onFinalize((e) => {
+      if (!dayWidth) {
+        Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
         return;
       }
-      const dw = dayWidth || 1;
       const effective = e.translationX + e.velocityX * FLING_SECONDS;
-      let deltaDays = -Math.round(effective / dw);
+      let deltaDays = -Math.round(effective / dayWidth);
       deltaDays = Math.max(-BUFFER_DAYS, Math.min(BUFFER_DAYS, deltaDays));
 
       if (deltaDays === 0) {
         Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
         return;
       }
-      const finalX = -deltaDays * dw;
+      const finalX = -deltaDays * dayWidth;
       Animated.timing(dragX, { toValue: finalX, duration: 200, useNativeDriver: true }).start(() => {
         dragX.setValue(0);
         onNavigate(deltaDays);
@@ -169,15 +166,15 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
         <View style={{ width: LABEL_WIDTH }} />
         <View style={{ flex: 1, overflow: 'hidden' }}>
           {panelWidth > 0 && (
-            <Animated.View style={[{ flexDirection: 'row', width: stripWidth }, carouselTransform]}>
-              {stripDates.map((d) => {
-                const isToday = d === today;
-                const isSelected = d === selectedDate;
-                const dow = dowIndex(d);
-                const weekendColor = dow === 6 ? '#E5484D' : dow === 5 ? '#2170D8' : undefined;
-                return (
-                  <GestureDetector key={d} gesture={makeSwipePan(d)}>
-                    <View style={[styles.dateHeaderCol, { width: dayWidth }]}>
+            <GestureDetector gesture={swipeGesture}>
+              <Animated.View style={[{ flexDirection: 'row', width: stripWidth }, carouselTransform]}>
+                {stripDates.map((d) => {
+                  const isToday = d === today;
+                  const isSelected = d === selectedDate;
+                  const dow = dowIndex(d);
+                  const weekendColor = dow === 6 ? '#E5484D' : dow === 5 ? '#2170D8' : undefined;
+                  return (
+                    <Pressable key={d} style={[styles.dateHeaderCol, { width: dayWidth }]} onPress={() => onSelectDate(d)}>
                       <Text style={[styles.dowText, weekendColor && { color: weekendColor }]}>{DOW_LABELS[dow]}</Text>
                       <View style={[styles.dateCircle, isSelected && { backgroundColor: pointColor }]}>
                         <Text style={[
@@ -189,11 +186,11 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
                           {parseInt(d.slice(8), 10)}
                         </Text>
                       </View>
-                    </View>
-                  </GestureDetector>
-                );
-              })}
-            </Animated.View>
+                    </Pressable>
+                  );
+                })}
+              </Animated.View>
+            </GestureDetector>
           )}
         </View>
       </View>

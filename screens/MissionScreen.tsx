@@ -306,10 +306,11 @@ export default function MissionScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* 헤더: 날짜(좌) / 전환·검색·설정(우) — 좌우 스와이프로 이전/다음 이동 */}
+      {/* 헤더: 날짜(좌) / 전환·검색·설정(우) — 날짜 쪽만 좌우 스와이프로 이전/다음 이동
+          (버튼 쪽까지 제스처로 감싸면 웹에서 탭이 씹히는 문제가 있어 버튼 영역은 제외) */}
       <View style={styles.header}>
-        <GestureDetector gesture={headerSwipeGesture}>
-          <View style={styles.headerRow}>
+        <View style={styles.headerRow}>
+          <GestureDetector gesture={headerSwipeGesture}>
             <View style={styles.headerLeft}>
               <DateDropdown
                 ref={dateDropdownRef}
@@ -318,24 +319,24 @@ export default function MissionScreen() {
                 onApply={navigate}
               />
             </View>
+          </GestureDetector>
 
-            <View style={styles.headerRight}>
-              <Pressable
-                onPress={() => setViewMode((m) => (m === 'week' ? 'month' : 'week'))}
-                style={styles.viewToggle}>
-                <Text style={styles.viewToggleText}>{viewMode === 'week' ? '주' : '월'}</Text>
-              </Pressable>
+          <View style={styles.headerRight}>
+            <Pressable
+              onPress={() => setViewMode((m) => (m === 'week' ? 'month' : 'week'))}
+              style={styles.viewToggle}>
+              <Text style={styles.viewToggleText}>{viewMode === 'week' ? '주' : '월'}</Text>
+            </Pressable>
 
-              <Pressable onPress={() => dateDropdownRef.current?.open()} style={styles.iconBtn}>
-                <IconSearch size={17} color={Colors.textPrimary} />
-              </Pressable>
+            <Pressable onPress={() => dateDropdownRef.current?.open()} style={styles.iconBtn}>
+              <IconSearch size={17} color={Colors.textPrimary} />
+            </Pressable>
 
-              <Pressable onPress={() => setSettingsVisible(true)} style={styles.iconBtn}>
-                <IconSettings size={17} color={Colors.textPrimary} />
-              </Pressable>
-            </View>
+            <Pressable onPress={() => setSettingsVisible(true)} style={styles.iconBtn}>
+              <IconSettings size={17} color={Colors.textPrimary} />
+            </Pressable>
           </View>
-        </GestureDetector>
+        </View>
       </View>
 
       {viewMode === 'month' ? (
@@ -430,7 +431,7 @@ const styles = StyleSheet.create({
 
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, gap: 10 },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   body: { flex: 1 },
   viewToggle: {
