@@ -2,18 +2,19 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, Pressable, TextInput, Modal, Animated, Dimensions,
 } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
+import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMissionStore } from '../stores/missionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { Priority, MissionRow } from '../db/missionDb';
-import DateDropdown from '../components/DateDropdown';
+import DateDropdown, { DateDropdownHandle } from '../components/DateDropdown';
 import TimePickerModal from '../components/TimePickerModal';
 import WeekTimeGridView, { WeekTimeGridHandle } from '../components/WeekTimeGridView';
 import MonthCalendar from '../components/MonthCalendar';
+import DayAgendaPanel from '../components/DayAgendaPanel';
 import DisplayModePicker from '../components/DisplayModePicker';
 import TodoDrawer, { HANDLE_HEIGHT, DRAWER_HEIGHT_RATIO } from '../components/TodoDrawer';
-import { IconChevronLeft, IconChevronRight, IconSliders } from '../components/icons';
+import { IconSliders, IconSearch, IconSettings } from '../components/icons';
 import { Colors } from '../constants/colors';
 import { useDateFade } from '../hooks/useDateFade';
 import { usePointColor } from '../hooks/usePointColor';
@@ -202,6 +203,7 @@ export default function MissionScreen() {
   const [displayPickerVisible, setDisplayPickerVisible] = useState(false);
   const [displayPickerAnchor, setDisplayPickerAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const sliderBtnRef = useRef<View>(null);
+  const dateDropdownRef = useRef<DateDropdownHandle>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget,   setEditTarget]   = useState<MissionRow | undefined>();
   const [presetTime,   setPresetTime]   = useState<string | undefined>();
@@ -214,6 +216,21 @@ export default function MissionScreen() {
   const { navigate } = useDateFade(loadDate);
 
   const weekDates = useMemo(() => getWeekDates(date), [date]);
+
+  const makeSwipeGesture = () => Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((e) => {
+      if (e.translationX < -40) {
+        navigate(viewMode === 'week' ? offsetDate(date, 7) : offsetMonth(date, 1));
+      } else if (e.translationX > 40) {
+        navigate(viewMode === 'week' ? offsetDate(date, -7) : offsetMonth(date, -1));
+      }
+    });
+  // 헤더는 두 뷰 모두 스와이프 가능. 주간 그리드 본문은 길게 눌러 드래그하는
+  // 기존 제스처(범위 생성/재배치)와 겹치지 않도록 스와이프를 헤더에만 둔다.
+  const headerSwipeGesture = makeSwipeGesture();
+  const monthSwipeGesture = makeSwipeGesture();
 
   const openAdd = (time?: string, category?: string, endTime?: string) => {
     setEditTarget(undefined); setPresetTime(time); setPresetEnd(endTime); setPresetCat(category); setModalVisible(true);
@@ -300,77 +317,88 @@ export default function MissionScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* 헤더: 주간 날짜바 */}
+      {/* 헤더: 날짜(좌) / 전환·검색·설정(우) — 좌우 스와이프로 이전/다음 이동 */}
       <View style={styles.header}>
-        <View style={styles.weekLabelRow}>
-          <Pressable
-            onPress={() => navigate(viewMode === 'week' ? offsetDate(date, -7) : offsetMonth(date, -1))}
-            style={styles.arrow}>
-            <IconChevronLeft size={24} color={Colors.textPrimary} />
-          </Pressable>
+        <GestureDetector gesture={headerSwipeGesture}>
+          <View style={styles.headerRow}>
+            <View style={styles.headerLeft}>
+              <DateDropdown
+                ref={dateDropdownRef}
+                date={date}
+                label={viewMode === 'week' ? labelWeek(date) : labelMonth(date)}
+                onApply={navigate}
+              />
+            </View>
 
-          <View style={styles.centerGroup}>
-            {viewMode === 'month' && (
-              <Pressable ref={sliderBtnRef} onPress={openDisplayPicker} style={styles.iconToggle}>
-                <IconSliders size={16} color={Colors.textPrimary} />
+            <View style={styles.headerRight}>
+              {viewMode === 'month' && (
+                <Pressable ref={sliderBtnRef} onPress={openDisplayPicker} style={styles.iconBtn}>
+                  <IconSliders size={16} color={Colors.textPrimary} />
+                </Pressable>
+              )}
+
+              <Pressable
+                onPress={() => setViewMode((m) => (m === 'week' ? 'month' : 'week'))}
+                style={styles.viewToggle}>
+                <Text style={styles.viewToggleText}>{viewMode === 'week' ? '주' : '월'}</Text>
               </Pressable>
-            )}
 
-            <DateDropdown date={date} label={viewMode === 'week' ? labelWeek(date) : labelMonth(date)} onApply={navigate} />
+              <Pressable onPress={() => dateDropdownRef.current?.open()} style={styles.iconBtn}>
+                <IconSearch size={17} color={Colors.textPrimary} />
+              </Pressable>
 
-            <Pressable
-              onPress={() => setViewMode((m) => (m === 'week' ? 'month' : 'week'))}
-              style={styles.viewToggle}>
-              <Text style={styles.viewToggleText}>{viewMode === 'week' ? '주' : '월'}</Text>
-            </Pressable>
+              <Pressable style={styles.iconBtn}>
+                <IconSettings size={17} color={Colors.textPrimary} />
+              </Pressable>
+            </View>
           </View>
-
-          <Pressable
-            onPress={() => navigate(viewMode === 'week' ? offsetDate(date, 7) : offsetMonth(date, 1))}
-            style={styles.arrow}>
-            <IconChevronRight size={24} color={Colors.textPrimary} />
-          </Pressable>
-        </View>
-
+        </GestureDetector>
       </View>
 
       {viewMode === 'month' ? (
-        <MonthCalendar date={date} selectedDate={date} onSelect={navigate} />
+        <GestureDetector gesture={monthSwipeGesture}>
+          <View style={styles.body}>
+            <MonthCalendar date={date} selectedDate={date} onSelect={navigate} />
+            <DayAgendaPanel date={date} missions={missions} onEditItem={openEdit} />
+          </View>
+        </GestureDetector>
       ) : (
-        <View style={styles.weekBody}>
-          <WeekTimeGridView
-            ref={gridRef}
-            weekDates={weekDates}
-            selectedDate={date}
-            onSelectDate={navigate}
-            onCreateRange={(d, start, end) => {
-              loadDate(d);
-              setPendingRange({ date: d, startTime: start, endTime: end });
-              openAdd(start, undefined, end);
-            }}
-            onEditItem={openEdit}
-            pendingRange={pendingRange}
-            onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
-            onItemDragUpdate={handleDragUpdate}
-            onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
-            draggingId={dragItem?.id ?? null}
-            dropPreview={dropPreview}
-          />
+        <View style={styles.body}>
+          <View style={styles.weekBody}>
+            <WeekTimeGridView
+              ref={gridRef}
+              weekDates={weekDates}
+              selectedDate={date}
+              onSelectDate={navigate}
+              onCreateRange={(d, start, end) => {
+                loadDate(d);
+                setPendingRange({ date: d, startTime: start, endTime: end });
+                openAdd(start, undefined, end);
+              }}
+              onEditItem={openEdit}
+              pendingRange={pendingRange}
+              onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
+              onItemDragUpdate={handleDragUpdate}
+              onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
+              draggingId={dragItem?.id ?? null}
+              dropPreview={dropPreview}
+            />
 
-          <TodoDrawer
-            expanded={todoOpen}
-            onToggle={() => setTodoOpen((v) => !v)}
-            missions={unscheduledItems}
-            categories={categories}
-            onAdd={(category) => openAdd(undefined, category)}
-            onToggleItem={toggle}
-            onDeleteItem={remove}
-            onEditItem={openEdit}
-            onItemDragStart={(item, x, y) => handleDragStart(item, 'drawer', x, y)}
-            onItemDragUpdate={handleDragUpdate}
-            onItemDragEnd={(item, x, y) => handleDragEnd(item, 'drawer', x, y)}
-            draggingId={dragItem?.id ?? null}
-          />
+            <TodoDrawer
+              expanded={todoOpen}
+              onToggle={() => setTodoOpen((v) => !v)}
+              missions={unscheduledItems}
+              categories={categories}
+              onAdd={(category) => openAdd(undefined, category)}
+              onToggleItem={toggle}
+              onDeleteItem={remove}
+              onEditItem={openEdit}
+              onItemDragStart={(item, x, y) => handleDragStart(item, 'drawer', x, y)}
+              onItemDragUpdate={handleDragUpdate}
+              onItemDragEnd={(item, x, y) => handleDragEnd(item, 'drawer', x, y)}
+              draggingId={dragItem?.id ?? null}
+            />
+          </View>
         </View>
       )}
 
@@ -406,16 +434,17 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
 
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, gap: 10 },
-  weekLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  arrow: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  centerGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  body: { flex: 1 },
   viewToggle: {
     paddingHorizontal: 13, paddingVertical: 7,
     borderRadius: 16, backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border,
   },
   viewToggleText: { fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
-  iconToggle: {
+  iconBtn: {
     width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border,
     alignItems: 'center', justifyContent: 'center',

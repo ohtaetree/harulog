@@ -214,6 +214,27 @@ export function IconSliders({ size = 20, color = Colors.textPrimary }: IconProps
   );
 }
 
+export function IconSearch({ size = 20, color = Colors.textPrimary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="10.5" cy="10.5" r="6.5" stroke={color} strokeWidth={STROKE} />
+      <Line x1="15.3" y1="15.3" x2="20.5" y2="20.5" stroke={color} strokeWidth={STROKE} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function IconSettings({ size = 20, color = Colors.textPrimary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={STROKE} />
+      <Path
+        d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M17.66 6.34l-1.42 1.42M7.76 16.24l-1.42 1.42M17.66 17.66l-1.42-1.42M7.76 7.76L6.34 6.34"
+        stroke={color} strokeWidth={STROKE} strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 export function IconRefresh({ size = 20, color = Colors.textPrimary }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

@@ -86,6 +86,12 @@ export function labelMonth(date: string): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 }
 
+export function labelFullDate(date: string): string {
+  const d = new Date(date + 'T00:00:00');
+  const dow = DOW_LABELS[(d.getDay() + 6) % 7];
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${dow})`;
+}
+
 export function labelShortDate(date: string): string {
   return new Date(date + 'T00:00:00').toLocaleDateString('ko-KR', {
     month: 'long', day: 'numeric', weekday: 'short',

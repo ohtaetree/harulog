@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { forwardRef, useImperativeHandle, useState } from 'react';
 import { View, Text, Modal, Pressable, StyleSheet } from 'react-native';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
@@ -15,7 +15,11 @@ interface Props {
   onApply: (date: string) => void;
 }
 
-export default function DateDropdown({ date, label, onApply }: Props) {
+export interface DateDropdownHandle {
+  open: () => void;
+}
+
+const DateDropdown = forwardRef<DateDropdownHandle, Props>(({ date, label, onApply }, ref) => {
   const pointColor = usePointColor();
   const [visible,  setVisible]  = useState(false);
   const [selDate,  setSelDate]  = useState(date);
@@ -26,6 +30,8 @@ export default function DateDropdown({ date, label, onApply }: Props) {
     setCalMonth(getMonthFirst(date));
     setVisible(true);
   };
+
+  useImperativeHandle(ref, () => ({ open }));
 
   const apply = () => {
     onApply(selDate);
@@ -101,7 +107,9 @@ export default function DateDropdown({ date, label, onApply }: Props) {
       </Modal>
     </>
   );
-}
+});
+
+export default DateDropdown;
 
 const styles = StyleSheet.create({
   chip: {
