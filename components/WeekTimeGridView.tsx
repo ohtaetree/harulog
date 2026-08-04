@@ -5,7 +5,7 @@ import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
 import { IconCheck } from './icons';
 import { getMissions, toggleMission, MissionRow, Priority } from '../db/missionDb';
-import { DOW_LABELS, todayStr } from '../utils/dateUtils';
+import { DOW_LABELS, todayStr, dowIndex } from '../utils/dateUtils';
 
 const START_HOUR = 0;
 const END_HOUR = 24;
@@ -112,14 +112,15 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
       {/* 요일 + 날짜 헤더 */}
       <View style={styles.dateHeaderRow}>
         <View style={{ width: LABEL_WIDTH }} />
-        {weekDates.map((d, i) => {
+        {weekDates.map((d) => {
           const isToday = d === today;
           const isSelected = d === selectedDate;
-          const weekendColor = i === 6 ? '#E5484D' : i === 5 ? '#2170D8' : undefined;
+          const dow = dowIndex(d);
+          const weekendColor = dow === 6 ? '#E5484D' : dow === 5 ? '#2170D8' : undefined;
 
           return (
             <Pressable key={d} style={styles.dateHeaderCol} onPress={() => onSelectDate(d)}>
-              <Text style={[styles.dowText, weekendColor && { color: weekendColor }]}>{DOW_LABELS[i]}</Text>
+              <Text style={[styles.dowText, weekendColor && { color: weekendColor }]}>{DOW_LABELS[dow]}</Text>
               <View style={[styles.dateCircle, isSelected && { backgroundColor: pointColor }]}>
                 <Text style={[
                   styles.dateNumText,

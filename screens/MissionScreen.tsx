@@ -11,8 +11,7 @@ import DateDropdown, { DateDropdownHandle } from '../components/DateDropdown';
 import TimePickerModal from '../components/TimePickerModal';
 import WeekTimeGridView, { WeekTimeGridHandle } from '../components/WeekTimeGridView';
 import MonthCalendar from '../components/MonthCalendar';
-import DayAgendaPanel from '../components/DayAgendaPanel';
-import TodoDrawer, { HANDLE_HEIGHT, DRAWER_HEIGHT_RATIO } from '../components/TodoDrawer';
+import AgendaPanel, { HANDLE_HEIGHT, PANEL_HEIGHT_RATIO } from '../components/AgendaPanel';
 import SettingsScreen from './SettingsScreen';
 import { IconSearch, IconSettings } from '../components/icons';
 import { Colors } from '../constants/colors';
@@ -214,19 +213,48 @@ export default function MissionScreen() {
 
   const weekDates = useMemo(() => getDateRange(date, weekVisibleDays), [date, weekVisibleDays]);
 
-  const makeSwipeGesture = () => Gesture.Pan()
+  const makeSnapSwipeGesture = (onPrev: () => void, onNext: () => void) => Gesture.Pan()
     .activeOffsetX([-20, 20])
     .failOffsetY([-15, 15])
     .onEnd((e) => {
-      if (e.translationX < -40) {
-        navigate(viewMode === 'week' ? offsetDate(date, weekVisibleDays) : offsetMonth(date, 1));
-      } else if (e.translationX > 40) {
-        navigate(viewMode === 'week' ? offsetDate(date, -weekVisibleDays) : offsetMonth(date, -1));
+      if (e.translationX < -40) onNext();
+      else if (e.translationX > 40) onPrev();
+    });
+  const headerSwipeGesture = makeSnapSwipeGesture(
+    () => navigate(viewMode === 'week' ? offsetDate(date, -weekVisibleDays) : offsetMonth(date, -1)),
+    () => navigate(viewMode === 'week' ? offsetDate(date, weekVisibleDays) : offsetMonth(date, 1)),
+  );
+  const monthSwipeGesture = makeSnapSwipeGesture(
+    () => navigate(offsetMonth(date, -1)),
+    () => navigate(offsetMonth(date, 1)),
+  );
+
+  // 주간 뷰 본문: 손가락을 따라 실시간으로 이동하다 놓으면 다음/이전 구간으로
+  // 자연스럽게 이어지는 드래그 (헤더/월간 뷰의 스냅식 스와이프와는 다름)
+  const weekDragX = useRef(new Animated.Value(0)).current;
+  const weekWidthRef = useRef(400);
+  const weekSwipeGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onUpdate((e) => { weekDragX.setValue(e.translationX); })
+    .onEnd((e) => {
+      const width = weekWidthRef.current;
+      const committed = e.translationX < -width * 0.25 || (e.translationX < -30 && e.velocityX < -600);
+      const committedPrev = e.translationX > width * 0.25 || (e.translationX > 30 && e.velocityX > 600);
+      if (committed) {
+        Animated.timing(weekDragX, { toValue: -width, duration: 200, useNativeDriver: true }).start(() => {
+          weekDragX.setValue(0);
+          navigate(offsetDate(date, weekVisibleDays));
+        });
+      } else if (committedPrev) {
+        Animated.timing(weekDragX, { toValue: width, duration: 200, useNativeDriver: true }).start(() => {
+          weekDragX.setValue(0);
+          navigate(offsetDate(date, -weekVisibleDays));
+        });
+      } else {
+        Animated.spring(weekDragX, { toValue: 0, useNativeDriver: true, bounciness: 6 }).start();
       }
     });
-  const headerSwipeGesture = makeSwipeGesture();
-  const monthSwipeGesture = makeSwipeGesture();
-  const weekSwipeGesture = makeSwipeGesture();
 
   const openAdd = (time?: string, category?: string, endTime?: string) => {
     setEditTarget(undefined); setPresetTime(time); setPresetEnd(endTime); setPresetCat(category); setModalVisible(true);
@@ -239,8 +267,7 @@ export default function MissionScreen() {
     else add(title, priority, category, startTime, endTime);
   };
 
-  const [todoOpen, setTodoOpen] = useState(false);
-  const unscheduledItems = missions.filter((m) => !m.start_time);
+  const [agendaOpen, setAgendaOpen] = useState(false);
 
   const gridRef = useRef<WeekTimeGridHandle>(null);
   const [dragItem, setDragItem] = useState<MissionRow | null>(null);
@@ -275,8 +302,8 @@ export default function MissionScreen() {
     ghostX.setValue(-1000); ghostY.setValue(-1000);
 
     const screenHeight = Dimensions.get('window').height;
-    const drawerHeight = todoOpen ? screenHeight * DRAWER_HEIGHT_RATIO : HANDLE_HEIGHT;
-    const droppedOnDrawer = y > screenHeight - drawerHeight;
+    const panelHeight = agendaOpen ? screenHeight * PANEL_HEIGHT_RATIO : HANDLE_HEIGHT;
+    const droppedOnDrawer = y > screenHeight - panelHeight;
 
     if (source === 'grid') {
       if (droppedOnDrawer) {
@@ -339,52 +366,69 @@ export default function MissionScreen() {
       </View>
 
       {viewMode === 'month' ? (
-        <GestureDetector gesture={monthSwipeGesture}>
-          <View style={styles.body}>
-            <MonthCalendar date={date} selectedDate={date} onSelect={navigate} />
-            <DayAgendaPanel date={date} missions={missions} onEditItem={openEdit} onAdd={() => openAdd()} />
-          </View>
-        </GestureDetector>
-      ) : (
-        <GestureDetector gesture={weekSwipeGesture}>
-          <View style={styles.body}>
-            <View style={styles.weekBody}>
-              <WeekTimeGridView
-                ref={gridRef}
-                weekDates={weekDates}
-                selectedDate={date}
-                onSelectDate={navigate}
-                onCreateRange={(d, start, end) => {
-                  loadDate(d);
-                  setPendingRange({ date: d, startTime: start, endTime: end });
-                  openAdd(start, undefined, end);
-                }}
-                onEditItem={openEdit}
-                pendingRange={pendingRange}
-                onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
-                onItemDragUpdate={handleDragUpdate}
-                onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
-                draggingId={dragItem?.id ?? null}
-                dropPreview={dropPreview}
-              />
-
-              <TodoDrawer
-                expanded={todoOpen}
-                onToggle={() => setTodoOpen((v) => !v)}
-                missions={unscheduledItems}
-                categories={categories}
-                onAdd={(category) => openAdd(undefined, category)}
-                onToggleItem={toggle}
-                onDeleteItem={remove}
-                onEditItem={openEdit}
-                onItemDragStart={(item, x, y) => handleDragStart(item, 'drawer', x, y)}
-                onItemDragUpdate={handleDragUpdate}
-                onItemDragEnd={(item, x, y) => handleDragEnd(item, 'drawer', x, y)}
-                draggingId={dragItem?.id ?? null}
-              />
+        <View style={styles.body}>
+          <GestureDetector gesture={monthSwipeGesture}>
+            <View style={{ flex: 1 }}>
+              <MonthCalendar date={date} selectedDate={date} onSelect={navigate} />
             </View>
+          </GestureDetector>
+
+          <AgendaPanel
+            date={date}
+            missions={missions}
+            categories={categories}
+            expanded={agendaOpen}
+            onToggle={() => setAgendaOpen((v) => !v)}
+            onEditItem={openEdit}
+            onAdd={(category) => openAdd(undefined, category)}
+            onToggleItem={toggle}
+            onDeleteItem={remove}
+          />
+        </View>
+      ) : (
+        <View style={styles.body}>
+          <View style={styles.weekBody} onLayout={(e) => { weekWidthRef.current = e.nativeEvent.layout.width; }}>
+            <GestureDetector gesture={weekSwipeGesture}>
+              <Animated.View style={{ flex: 1, transform: [{ translateX: weekDragX }] }}>
+                <WeekTimeGridView
+                  ref={gridRef}
+                  weekDates={weekDates}
+                  selectedDate={date}
+                  onSelectDate={navigate}
+                  onCreateRange={(d, start, end) => {
+                    loadDate(d);
+                    setPendingRange({ date: d, startTime: start, endTime: end });
+                    openAdd(start, undefined, end);
+                  }}
+                  onEditItem={openEdit}
+                  pendingRange={pendingRange}
+                  onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
+                  onItemDragUpdate={handleDragUpdate}
+                  onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
+                  draggingId={dragItem?.id ?? null}
+                  dropPreview={dropPreview}
+                />
+              </Animated.View>
+            </GestureDetector>
           </View>
-        </GestureDetector>
+
+          <AgendaPanel
+            date={date}
+            missions={missions}
+            categories={categories}
+            expanded={agendaOpen}
+            onToggle={() => setAgendaOpen((v) => !v)}
+            onEditItem={openEdit}
+            onAdd={(category) => openAdd(undefined, category)}
+            onToggleItem={toggle}
+            onDeleteItem={remove}
+            draggable
+            onItemDragStart={(item, x, y) => handleDragStart(item, 'drawer', x, y)}
+            onItemDragUpdate={handleDragUpdate}
+            onItemDragEnd={(item, x, y) => handleDragEnd(item, 'drawer', x, y)}
+            draggingId={dragItem?.id ?? null}
+          />
+        </View>
       )}
 
       {dragItem && (

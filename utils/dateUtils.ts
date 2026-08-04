@@ -76,9 +76,14 @@ export function labelMonth(date: string): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 }
 
+/** Mon=0 .. Sun=6, matching DOW_LABELS order (unlike Date#getDay's Sun=0) */
+export function dowIndex(date: string): number {
+  return (new Date(date + 'T00:00:00').getDay() + 6) % 7;
+}
+
 export function labelFullDate(date: string): string {
   const d = new Date(date + 'T00:00:00');
-  const dow = DOW_LABELS[(d.getDay() + 6) % 7];
+  const dow = DOW_LABELS[dowIndex(date)];
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${dow})`;
 }
 
