@@ -17,7 +17,7 @@ const MIN_BLOCK_HEIGHT = 20;
 const INITIAL_SCROLL_HOUR = 6;
 const SNAP_MIN = 15;
 const BUFFER_DAYS = 7; // 스와이프로 하루 이상 넘어갈 수 있게 앞뒤로 미리 렌더링해두는 여유 일수
-const FLING_SECONDS = 0.15;
+const FLING_SECONDS = 0.24;
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 
@@ -144,13 +144,14 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const HORIZONTAL_DOMINANCE = 1.6;
   const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const lastMoveRef = useRef<{ x: number; t: number } | null>(null);
+  const velocityXRef = useRef(0);
   const swipeModeRef = useRef<'undecided' | 'horizontal' | 'rejected'>('undecided');
 
   const settle = (toValue: number, distance: number, onDone?: () => void) => {
     Animated.timing(dragX, {
       toValue,
-      duration: Math.max(140, Math.min(280, 140 + Math.abs(distance) * 0.45)),
-      easing: Easing.out(Easing.cubic),
+      duration: Math.max(280, Math.min(560, 280 + Math.abs(distance) * 0.7)),
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) onDone?.();
@@ -163,8 +164,10 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
       return;
     }
     const effective = dx + velocityX * FLING_SECONDS;
-    let deltaDays = -Math.round(effective / dayWidth);
-    deltaDays = Math.max(-BUFFER_DAYS, Math.min(BUFFER_DAYS, deltaDays));
+    const direction = effective === 0 ? Math.sign(dx) : Math.sign(effective);
+    // 인식된 가벼운 스와이프는 적어도 하루, 빠른 플릭은 속도만큼 최대 7일까지 이동.
+    const dayCount = Math.max(1, Math.round(Math.abs(effective) / dayWidth));
+    const deltaDays = Math.max(-BUFFER_DAYS, Math.min(BUFFER_DAYS, -direction * dayCount));
 
     if (deltaDays === 0) {
       settle(0, dx);
@@ -182,6 +185,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     if (!t) return;
     touchStartRef.current = { x: t.pageX, y: t.pageY, t: Date.now() };
     lastMoveRef.current = { x: t.pageX, t: Date.now() };
+    velocityXRef.current = 0;
     swipeModeRef.current = 'undecided';
   };
 
@@ -215,8 +219,14 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
       }
     }
 
+    const now = Date.now();
+    const last = lastMoveRef.current;
+    if (last) {
+      const instantVelocity = (t.pageX - last.x) / Math.max(1, now - last.t) * 1000;
+      velocityXRef.current = velocityXRef.current * 0.35 + instantVelocity * 0.65;
+    }
     dragX.setValue(dx);
-    lastMoveRef.current = { x: t.pageX, t: Date.now() };
+    lastMoveRef.current = { x: t.pageX, t: now };
   };
 
   const handleTouchEnd = (e: any) => {
@@ -229,10 +239,7 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
 
     const t = e.nativeEvent.changedTouches?.[0];
     const dx = t ? t.pageX - start.x : 0;
-    const last = lastMoveRef.current;
-    const dt = last ? Math.max(1, Date.now() - last.t) : 1;
-    const velocityX = last && t ? (t.pageX - last.x) / dt * 1000 : 0;
-    commitOrSpringBack(dx, velocityX);
+    commitOrSpringBack(dx, velocityXRef.current);
   };
 
   const carouselTransform = { transform: [{ translateX: Animated.subtract(dragX, panelWidth) }] };

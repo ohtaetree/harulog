@@ -217,6 +217,7 @@ export default function MissionScreen() {
   // 스와이프는 구간만 옮기고, 날짜 선택(탭)은 date만 바꾼다. 월간 뷰에서 날짜를 고르고
   // 주간 뷰로 전환할 때만 구간이 그 날짜에 맞춰 다시 잡힌다.
   const [weekAnchor, setWeekAnchor] = useState(() => todayStr());
+  const [gridResetKey, setGridResetKey] = useState(0);
   useEffect(() => {
     if (viewMode === 'week') setWeekAnchor(date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,6 +227,8 @@ export default function MissionScreen() {
   const today = todayStr();
   const goToToday = () => {
     setWeekAnchor(today);
+    // 내부 캐러셀 위치도 초기화해, 현재 보고 있던 먼 날짜의 이동 상태가 남지 않게 한다.
+    setGridResetKey((key) => key + 1);
     // 지연되는 페이드 내비게이션을 거치지 않아, 오늘이 즉시 왼쪽 첫 칸으로 배치된다.
     loadDate(today);
   };
@@ -387,11 +390,12 @@ export default function MissionScreen() {
         <View style={styles.body}>
           <View style={styles.weekBody}>
             <WeekTimeGridView
+              key={gridResetKey}
               ref={gridRef}
               weekDates={weekDates}
               selectedDate={date}
               onSelectDate={navigate}
-              onNavigate={(delta) => setWeekAnchor(offsetDate(weekAnchor, delta))}
+              onNavigate={(delta) => setWeekAnchor((anchor) => offsetDate(anchor, delta))}
               onCreateRange={(d, start, end) => {
                 loadDate(d);
                 setPendingRange({ date: d, startTime: start, endTime: end });
