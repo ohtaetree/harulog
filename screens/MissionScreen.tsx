@@ -13,7 +13,7 @@ import WeekTimeGridView, { WeekTimeGridHandle } from '../components/WeekTimeGrid
 import MonthCalendar from '../components/MonthCalendar';
 import AgendaPanel, { HANDLE_HEIGHT, PANEL_HEIGHT_RATIO } from '../components/AgendaPanel';
 import SettingsScreen from './SettingsScreen';
-import { IconSearch, IconSettings } from '../components/icons';
+import { IconSettings } from '../components/icons';
 import { Colors } from '../constants/colors';
 import { useDateFade } from '../hooks/useDateFade';
 import { usePointColor } from '../hooks/usePointColor';
@@ -282,6 +282,7 @@ export default function MissionScreen() {
   const [dragItem, setDragItem] = useState<MissionRow | null>(null);
   const [dropPreview, setDropPreview] = useState<{ date: string; time: string; durationMin: number } | null>(null);
   const dragDurationRef = useRef(30);
+  const dragOffsetRef = useRef(0);
   const ghostX = useRef(new Animated.Value(-1000)).current;
   const ghostY = useRef(new Animated.Value(-1000)).current;
 
@@ -292,22 +293,25 @@ export default function MissionScreen() {
     return Math.max(endMin - startMin, 15);
   };
 
-  const handleDragStart = (item: MissionRow, source: 'grid' | 'drawer', x: number, y: number) => {
+  const handleDragStart = (item: MissionRow, source: 'grid' | 'drawer', x: number, y: number, offsetMinutes = 0) => {
     setDragItem(item);
     dragDurationRef.current = durationOf(item);
+    dragOffsetRef.current = offsetMinutes;
     ghostX.setValue(x); ghostY.setValue(y);
   };
   const handleDragUpdate = (x: number, y: number) => {
     ghostX.setValue(x); ghostY.setValue(y);
     gridRef.current?.getDropTarget(x, y, (target) => {
       if (!target) { setDropPreview((p) => (p ? null : p)); return; }
-      const next = { date: target.date, time: target.time, durationMin: dragDurationRef.current };
+      const next = { date: target.date, time: minutesToTimeStr(timeToMinutes(target.time) - dragOffsetRef.current), durationMin: dragDurationRef.current };
       setDropPreview((p) => (p && p.date === next.date && p.time === next.time && p.durationMin === next.durationMin ? p : next));
     });
   };
   const handleDragEnd = (item: MissionRow, source: 'grid' | 'drawer', x: number, y: number) => {
     setDragItem(null);
     setDropPreview(null);
+    const pointerOffset = dragOffsetRef.current;
+    dragOffsetRef.current = 0;
     ghostX.setValue(-1000); ghostY.setValue(-1000);
 
     const screenHeight = Dimensions.get('window').height;
@@ -327,7 +331,7 @@ export default function MissionScreen() {
         const startMin = item.start_time ? timeToMinutes(item.start_time) : 0;
         const endMin = item.end_time ? timeToMinutes(item.end_time) : startMin + 30;
         const duration = Math.max(endMin - startMin, 15);
-        const newStartMin = timeToMinutes(target.time);
+        const newStartMin = timeToMinutes(target.time) - pointerOffset;
         const newEndTime = minutesToTimeStr(newStartMin + duration);
         update(item.id, item.title, item.priority, item.category, target.time, newEndTime, target.date);
       });
@@ -337,8 +341,9 @@ export default function MissionScreen() {
     if (droppedOnDrawer) return;
     gridRef.current?.getDropTarget(x, y, (target) => {
       if (!target) return;
-      const endTime = minutesToTimeStr(timeToMinutes(target.time) + dragDurationRef.current);
-      update(item.id, item.title, item.priority, item.category, target.time, endTime, target.date);
+      const startTime = minutesToTimeStr(timeToMinutes(target.time) - pointerOffset);
+      const endTime = minutesToTimeStr(timeToMinutes(startTime) + dragDurationRef.current);
+      update(item.id, item.title, item.priority, item.category, startTime, endTime, target.date);
       loadDate(target.date);
     });
   };
@@ -374,10 +379,6 @@ export default function MissionScreen() {
               onPress={() => setViewMode(viewMode === 'week' ? 'month' : 'week')}
               style={styles.viewToggle}>
               <Text style={styles.viewToggleText}>{viewMode === 'week' ? '주' : '월'}</Text>
-            </Pressable>
-
-            <Pressable onPress={() => dateDropdownRef.current?.open()} style={styles.iconBtn}>
-              <IconSearch size={17} color={Colors.textPrimary} />
             </Pressable>
 
             <Pressable onPress={() => setSettingsVisible(true)} style={styles.iconBtn}>
@@ -431,7 +432,6 @@ export default function MissionScreen() {
               onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
               onItemDragUpdate={handleDragUpdate}
               onItemDragEnd={(item, x, y) => handleDragEnd(item, 'grid', x, y)}
-              onItemResize={handleItemResize}
               draggingId={dragItem?.id ?? null}
               dropPreview={dropPreview}
             />

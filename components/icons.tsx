@@ -226,11 +226,11 @@ export function IconSearch({ size = 20, color = Colors.textPrimary }: IconProps)
 export function IconSettings({ size = 20, color = Colors.textPrimary }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={STROKE} />
       <Path
-        d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M17.66 6.34l-1.42 1.42M7.76 16.24l-1.42 1.42M17.66 17.66l-1.42-1.42M7.76 7.76L6.34 6.34"
-        stroke={color} strokeWidth={STROKE} strokeLinecap="round"
+        d="M9.25 3.8h5.5l.75 2.1 2 .85 2.05-.85 2.75 4.75-1.55 1.55v2.3l1.55 1.55-2.75 4.75-2.05-.85-2 .85-.75 2.1h-5.5l-.75-2.1-2-.85-2.05.85-2.75-4.75 1.55-1.55v-2.3L1.7 10.65l2.75-4.75 2.05.85 2-.85.75-2.1Z"
+        stroke={color} strokeWidth={STROKE} strokeLinejoin="round"
       />
+      <Circle cx="12" cy="12" r="2.6" stroke={color} strokeWidth={STROKE} />
     </Svg>
   );
 }

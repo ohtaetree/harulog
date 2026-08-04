@@ -58,10 +58,9 @@ interface Props {
   onCreateRange: (date: string, startTime: string, endTime: string) => void;
   onEditItem: (item: MissionRow) => void;
   pendingRange: PendingRange | null;
-  onItemDragStart: (item: MissionRow, x: number, y: number) => void;
+  onItemDragStart: (item: MissionRow, x: number, y: number, offsetMinutes?: number) => void;
   onItemDragUpdate: (x: number, y: number) => void;
   onItemDragEnd: (item: MissionRow, x: number, y: number) => void;
-  onItemResize: (item: MissionRow, edge: 'start' | 'end', deltaMinutes: number) => void;
   draggingId: number | null;
   dropPreview: { date: string; time: string; durationMin: number } | null;
   /** Called when a horizontal drag commits — deltaDays can be any size depending on drag distance/velocity. */
@@ -70,7 +69,7 @@ interface Props {
 
 const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   weekDates, selectedDate, onSelectDate, onCreateRange, onEditItem, pendingRange,
-  onItemDragStart, onItemDragUpdate, onItemDragEnd, onItemResize, draggingId, dropPreview, onNavigate,
+  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview, onNavigate,
 }, ref) => {
   const pointColor = usePointColor();
   const today = todayStr();
@@ -339,7 +338,6 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
                         onItemDragStart={onItemDragStart}
                         onItemDragUpdate={onItemDragUpdate}
                         onItemDragEnd={onItemDragEnd}
-                        onItemResize={onItemResize}
                         draggingId={draggingId}
                         onGestureActive={setVerticalScrollLocked}
                         dropPreview={dropPreview && dropPreview.date === d ? { time: dropPreview.time, durationMin: dropPreview.durationMin } : null}
@@ -384,7 +382,7 @@ function DayColumnPreview({ date, width, hours, isToday, pointColor, priorityCol
           <View key={item.id} style={[styles.block, { top, height, borderLeftColor: color }]}>
             <View style={styles.blockCheckbox}>
               <View style={[styles.checkDot, done && { backgroundColor: color, borderColor: color }]}>
-                {done && <IconCheck size={7} color="#fff" />}
+                {done && <IconCheck size={10} color="#fff" />}
               </View>
             </View>
             <Text numberOfLines={height < 30 ? 1 : 2} style={[styles.blockTitle, done && styles.blockTitleDone]}>
@@ -399,7 +397,7 @@ function DayColumnPreview({ date, width, hours, isToday, pointColor, priorityCol
 
 function DayColumn({
   date, width, hours, isToday, pointColor, priorityColor, onCreateRange, onEditItem, onToggle, pending,
-  onItemDragStart, onItemDragUpdate, onItemDragEnd, onItemResize, draggingId, dropPreview, onGestureActive,
+  onItemDragStart, onItemDragUpdate, onItemDragEnd, draggingId, dropPreview, onGestureActive,
 }: {
   date: string; width: number; hours: number[]; isToday: boolean; pointColor: string;
   priorityColor: Record<Priority, string>;
@@ -407,10 +405,9 @@ function DayColumn({
   onEditItem: (item: MissionRow) => void;
   onToggle: (item: MissionRow) => void;
   pending: PendingRange | null;
-  onItemDragStart: (item: MissionRow, x: number, y: number) => void;
+  onItemDragStart: (item: MissionRow, x: number, y: number, offsetMinutes?: number) => void;
   onItemDragUpdate: (x: number, y: number) => void;
   onItemDragEnd: (item: MissionRow, x: number, y: number) => void;
-  onItemResize: (item: MissionRow, edge: 'start' | 'end', deltaMinutes: number) => void;
   draggingId: number | null;
   dropPreview: { time: string; durationMin: number } | null;
   onGestureActive: (active: boolean) => void;
@@ -511,7 +508,6 @@ function DayColumn({
             onDragStart={onItemDragStart}
             onDragUpdate={onItemDragUpdate}
             onDragEnd={onItemDragEnd}
-            onResize={onItemResize}
             onGestureActive={onGestureActive}
           />
         );
@@ -520,13 +516,12 @@ function DayColumn({
   );
 }
 
-function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onToggle, onDragStart, onDragUpdate, onDragEnd, onResize, onGestureActive }: {
+function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onToggle, onDragStart, onDragUpdate, onDragEnd, onGestureActive }: {
   item: MissionRow; top: number; height: number; color: string; done: boolean; dragging: boolean;
   onEdit: () => void; onToggle: () => void;
-  onDragStart: (item: MissionRow, x: number, y: number) => void;
+  onDragStart: (item: MissionRow, x: number, y: number, offsetMinutes?: number) => void;
   onDragUpdate: (x: number, y: number) => void;
   onDragEnd: (item: MissionRow, x: number, y: number) => void;
-  onResize: (item: MissionRow, edge: 'start' | 'end', deltaMinutes: number) => void;
   onGestureActive: (active: boolean) => void;
 }) {
   const tapGesture = Gesture.Tap()
@@ -537,7 +532,7 @@ function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onTo
     .activateAfterLongPress(260)
     .onStart((e) => {
       onGestureActive(true);
-      onDragStart(item, e.absoluteX, e.absoluteY);
+      onDragStart(item, e.absoluteX, e.absoluteY, Math.max(0, Math.round((e.y / HOUR_HEIGHT) * 4) * 15));
     })
     .onUpdate((e) => onDragUpdate(e.absoluteX, e.absoluteY))
     .onFinalize((e) => {
@@ -546,33 +541,18 @@ function ScheduledBlock({ item, top, height, color, done, dragging, onEdit, onTo
     });
 
   const blockGesture = Gesture.Race(tapGesture, dragGesture);
-  const resizeGesture = (edge: 'start' | 'end') => Gesture.Pan()
-    .activeOffsetY([-4, 4])
-    .onStart(() => onGestureActive(true))
-    .onFinalize((e, success) => {
-      onGestureActive(false);
-      if (!success) return;
-      const deltaMinutes = Math.round((e.translationY / HOUR_HEIGHT) * 4) * 15;
-      if (deltaMinutes !== 0) onResize(item, edge, deltaMinutes);
-    });
 
   return (
     <GestureDetector gesture={blockGesture}>
       <View style={[styles.block, { top, height, borderLeftColor: color }, dragging && styles.blockDragging]}>
-        <GestureDetector gesture={resizeGesture('start')}>
-          <View style={styles.resizeHandleTop} />
-        </GestureDetector>
         <Pressable onPress={onToggle} hitSlop={4} style={styles.blockCheckbox}>
           <View style={[styles.checkDot, done && { backgroundColor: color, borderColor: color }]}>
-            {done && <IconCheck size={7} color="#fff" />}
+          {done && <IconCheck size={10} color="#fff" />}
           </View>
         </Pressable>
         <Text numberOfLines={height < 30 ? 1 : 2} style={[styles.blockTitle, done && styles.blockTitleDone]}>
           {item.title}
         </Text>
-        <GestureDetector gesture={resizeGesture('end')}>
-          <View style={styles.resizeHandleBottom} />
-        </GestureDetector>
       </View>
     </GestureDetector>
   );
@@ -623,13 +603,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   blockDragging: { opacity: 0.3 },
-  resizeHandleTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 9, zIndex: 3 },
-  resizeHandleBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 9, zIndex: 3 },
   blockCheckbox: { alignSelf: 'flex-start' },
   checkDot: {
-    width: 9, height: 9, borderRadius: 4.5, borderWidth: 1.5, borderColor: Colors.border,
+    width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: Colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  blockTitle: { fontSize: 8.5, fontWeight: '600', color: Colors.textPrimary, lineHeight: 10 },
+  blockTitle: { fontSize: 12, fontWeight: '700', color: Colors.textPrimary, lineHeight: 15 },
   blockTitleDone: { color: Colors.textMuted, textDecorationLine: 'line-through' },
 });
