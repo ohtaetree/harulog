@@ -19,7 +19,8 @@ function AppContent() {
 function useStableMobileViewportHeight() {
   const getViewportHeight = () => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
-    return Math.round(window.visualViewport?.height ?? window.innerHeight);
+    const measured = Math.round(window.visualViewport?.height ?? window.innerHeight);
+    return measured > 100 ? measured : Math.round(window.innerHeight);
   };
   const [height, setHeight] = useState<number | undefined>(getViewportHeight);
   const viewportWidthRef = useRef(
@@ -35,36 +36,14 @@ function useStableMobileViewportHeight() {
       const nextWidth = Math.round(viewport?.width ?? window.innerWidth);
       if (Math.abs(nextWidth - viewportWidthRef.current) > 80) {
         viewportWidthRef.current = nextWidth;
-        setHeight(Math.round(viewport?.height ?? window.innerHeight));
+        const measured = Math.round(viewport?.height ?? window.innerHeight);
+        setHeight(measured > 100 ? measured : Math.round(window.innerHeight));
       }
     };
-
-    const root = document.documentElement;
-    const body = document.body;
-    const previous = {
-      rootOverflow: root.style.overflow,
-      rootHeight: root.style.height,
-      bodyOverflow: body.style.overflow,
-      bodyHeight: body.style.height,
-      bodyPosition: body.style.position,
-      bodyWidth: body.style.width,
-    };
-    root.style.overflow = 'hidden';
-    root.style.height = '100%';
-    body.style.overflow = 'hidden';
-    body.style.height = '100%';
-    body.style.position = 'fixed';
-    body.style.width = '100%';
 
     window.addEventListener('orientationchange', syncOrientation);
     return () => {
       window.removeEventListener('orientationchange', syncOrientation);
-      root.style.overflow = previous.rootOverflow;
-      root.style.height = previous.rootHeight;
-      body.style.overflow = previous.bodyOverflow;
-      body.style.height = previous.bodyHeight;
-      body.style.position = previous.bodyPosition;
-      body.style.width = previous.bodyWidth;
     };
   }, []);
 
@@ -148,7 +127,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   mobileShell: {
-    flex: 0,
+    flex: 1,
     width: '100%',
     backgroundColor: Colors.background,
     overflow: 'hidden',
