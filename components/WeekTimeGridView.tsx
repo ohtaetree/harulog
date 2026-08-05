@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated, Easing } from 'react-native';
 import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
@@ -89,7 +89,18 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const [panelWidth, setPanelWidth] = useState(0);
   const panelWidthRef = useRef(0);
   const dragX = useRef(new Animated.Value(0)).current;
+  const settlingRef = useRef(false);
+  const navigationPendingRef = useRef(false);
+  const previousAnchorRef = useRef(weekDates[0]);
   const dayWidth = panelWidth > 0 ? panelWidth / visibleDays : 0;
+
+  useLayoutEffect(() => {
+    if (previousAnchorRef.current === weekDates[0]) return;
+    previousAnchorRef.current = weekDates[0];
+    dragX.setValue(0);
+    settlingRef.current = false;
+    navigationPendingRef.current = false;
+  }, [weekDates[0], dragX]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: (INITIAL_SCROLL_HOUR - START_HOUR) * HOUR_HEIGHT, animated: false });
@@ -153,13 +164,15 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
   const swipeModeRef = useRef<'undecided' | 'horizontal' | 'rejected'>('undecided');
 
   const settle = (toValue: number, distance: number, onDone?: () => void) => {
+    settlingRef.current = true;
     Animated.timing(dragX, {
       toValue,
       duration: Math.max(280, Math.min(560, 280 + Math.abs(distance) * 0.7)),
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start(({ finished }) => {
-      if (finished) onDone?.();
+      if (finished && onDone) onDone();
+      else settlingRef.current = false;
     });
   };
 
@@ -180,12 +193,13 @@ const WeekTimeGridView = forwardRef<WeekTimeGridHandle, Props>(({
     }
     const finalX = -deltaDays * dayWidth;
     settle(finalX, finalX - dx, () => {
-      dragX.setValue(0);
+      navigationPendingRef.current = true;
       onNavigate(deltaDays);
     });
   };
 
   const handleTouchStart = (e: any) => {
+    if (settlingRef.current || navigationPendingRef.current) return;
     const t = e.nativeEvent.touches?.[0];
     if (!t) return;
     touchStartRef.current = { x: t.pageX, y: t.pageY, t: Date.now() };
@@ -543,9 +557,9 @@ function ScheduledBlock({ item, top, height, color, done, past, dragging, onEdit
       onDragStart(item, e.absoluteX, e.absoluteY, Math.max(0, Math.round((e.y / HOUR_HEIGHT) * 4) * 15));
     })
     .onUpdate((e) => onDragUpdate(e.absoluteX, e.absoluteY))
-    .onFinalize((e) => {
+    .onFinalize((e, success) => {
       onGestureActive(false);
-      onDragEnd(item, e.absoluteX, e.absoluteY);
+      if (success) onDragEnd(item, e.absoluteX, e.absoluteY);
     });
 
   const blockGesture = Gesture.Race(tapGesture, dragGesture);
@@ -606,7 +620,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3, paddingVertical: 2, gap: 1,
     overflow: 'hidden',
   },
-  blockDragging: { opacity: 0.3 },
+  blockDragging: {
+    opacity: 0.9, zIndex: 20, transform: [{ scale: 1.015 }],
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.16, shadowRadius: 7,
+    elevation: 7,
+  },
   blockPast: { opacity: 0.38 },
   blockCheckbox: { alignSelf: 'flex-start' },
   checkDot: {

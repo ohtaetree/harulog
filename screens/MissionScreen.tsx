@@ -1,25 +1,22 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, TextInput, Modal, Animated, Dimensions,
+  View, Text, StyleSheet, Pressable, Modal, Animated, Dimensions,
 } from 'react-native';
-import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMissionStore } from '../stores/missionStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { Priority, MissionRow, addMission, getMissions } from '../db/missionDb';
+import { MissionRow, addMission, getMissions } from '../db/missionDb';
 import DateDropdown, { DateDropdownHandle } from '../components/DateDropdown';
-import TimePickerModal from '../components/TimePickerModal';
 import WeekTimeGridView, { WeekTimeGridHandle } from '../components/WeekTimeGridView';
 import MonthCalendar from '../components/MonthCalendar';
-import AgendaPanel, { HANDLE_HEIGHT, PANEL_HEIGHT_RATIO } from '../components/AgendaPanel';
+import AgendaPanel, { AgendaEditorDraft, HANDLE_HEIGHT, PANEL_HEIGHT_RATIO } from '../components/AgendaPanel';
 import SettingsScreen from './SettingsScreen';
 import { IconSettings } from '../components/icons';
 import { Colors } from '../constants/colors';
 import { useDateFade } from '../hooks/useDateFade';
 import { usePointColor } from '../hooks/usePointColor';
 import { todayStr, offsetDate, offsetMonth, getDateRange, labelWeek, labelMonth } from '../utils/dateUtils';
-
-const PRIORITY_LABEL: Record<Priority, string> = { high: '높음', medium: '보통', low: '낮음' };
 
 function timeToMinutes(t: string) {
   const [h, m] = t.split(':').map(Number);
@@ -32,169 +29,10 @@ function minutesToTimeStr(min: number) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-// ── 추가/수정 모달 ────────────────────────────────────────────────────────────
-
-function AddEditModal({ visible, initial, presetStartTime, presetEndTime, presetCategory, categories, onClose, onSave }: {
-  visible: boolean; initial?: MissionRow; presetStartTime?: string; presetEndTime?: string;
-  presetCategory?: string; categories: string[];
-  onClose: () => void;
-  onSave: (title: string, priority: Priority, category: string, startTime: string | null, endTime: string | null) => void;
-}) {
-  const pointColor = usePointColor();
-  const [title, setTitle]       = useState('');
-  const [priority, setPriority] = useState<Priority>('medium');
-  const [category, setCategory] = useState('');
-  const [customCat, setCustomCat] = useState('');
-  const [timed, setTimed]         = useState(false);
-  const [startTime, setStartTime] = useState<string | null>(null);
-  const [endTime, setEndTime]     = useState<string | null>(null);
-  const [pickerTarget, setPickerTarget] = useState<'start' | 'end' | null>(null);
-
-  useEffect(() => {
-    if (visible) {
-      setTitle(initial?.title ?? '');
-      setPriority(initial?.priority ?? 'medium');
-      const cat = initial?.category ?? presetCategory ?? '';
-      if (categories.includes(cat) || cat === '') {
-        setCategory(cat); setCustomCat('');
-      } else {
-        setCategory('__custom__'); setCustomCat(cat);
-      }
-      const initStart = initial?.start_time ?? presetStartTime ?? null;
-      setTimed(!!initStart);
-      setStartTime(initStart);
-      setEndTime(initial?.end_time ?? presetEndTime ?? null);
-    }
-  }, [visible, initial, presetStartTime, presetEndTime, presetCategory]);
-
-  const handleSave = () => {
-    const t = title.trim();
-    if (!t) return;
-    const finalCat = category === '__custom__' ? customCat.trim() : category;
-    onSave(t, priority, finalCat, timed ? startTime : null, timed ? endTime : null);
-    onClose();
-  };
-
-  const toggleTimed = () => {
-    setTimed((prev) => {
-      const next = !prev;
-      if (next && !startTime) setStartTime('09:00');
-      return next;
-    });
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={styles.sheetCard}>
-        <ScrollView contentContainerStyle={styles.sheet}
-          keyboardShouldPersistTaps="handled">
-        <Text style={styles.sheetTitle}>{initial ? '할일 수정' : '새 할일'}</Text>
-
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="할일을 입력하세요"
-          placeholderTextColor={Colors.textMuted}
-          autoFocus
-          returnKeyType="done"
-          onSubmitEditing={handleSave}
-          maxLength={60}
-        />
-
-        <Text style={styles.secLabel}>우선순위</Text>
-        <View style={styles.priorityRow}>
-          {(['high', 'medium', 'low'] as Priority[]).map((p) => {
-            const dotColor = p === 'high' ? '#EF4444' : p === 'medium' ? pointColor : Colors.textMuted;
-            const active = priority === p;
-            return (
-              <Pressable key={p} onPress={() => setPriority(p)}
-                style={[styles.priorityBtn, active && { backgroundColor: dotColor, borderColor: dotColor }]}>
-                <View style={[styles.priorityDot, { backgroundColor: active ? '#fff' : dotColor }]} />
-                <Text style={[styles.priorityBtnText, active && { color: '#fff' }]}>{PRIORITY_LABEL[p]}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Text style={styles.secLabel}>카테고리</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={styles.catScroll} contentContainerStyle={styles.catContent}>
-          <Pressable onPress={() => setCategory('')}
-            style={[styles.catChip, category === '' && { backgroundColor: pointColor, borderColor: pointColor }]}>
-            <Text style={[styles.catChipText, category === '' && styles.catChipTextActive]}>없음</Text>
-          </Pressable>
-          {categories.map((c) => (
-            <Pressable key={c} onPress={() => setCategory(c)}
-              style={[styles.catChip, category === c && { backgroundColor: pointColor, borderColor: pointColor }]}>
-              <Text style={[styles.catChipText, category === c && styles.catChipTextActive]}>{c}</Text>
-            </Pressable>
-          ))}
-          <Pressable onPress={() => setCategory('__custom__')}
-            style={[styles.catChip, category === '__custom__' && { backgroundColor: pointColor, borderColor: pointColor }]}>
-            <Text style={[styles.catChipText, category === '__custom__' && styles.catChipTextActive]}>직접 입력</Text>
-          </Pressable>
-        </ScrollView>
-
-        {category === '__custom__' && (
-          <TextInput
-            style={[styles.customCatInput, { borderColor: pointColor }]}
-            value={customCat}
-            onChangeText={setCustomCat}
-            placeholder="카테고리 직접 입력"
-            placeholderTextColor={Colors.textMuted}
-            maxLength={20}
-          />
-        )}
-
-        <View style={styles.timedRow}>
-          <Text style={styles.secLabel}>시간 지정</Text>
-          <Pressable onPress={toggleTimed} style={[styles.timedSwitch, timed && { backgroundColor: pointColor }]}>
-            <View style={[styles.timedKnob, timed && styles.timedKnobActive]} />
-          </Pressable>
-        </View>
-
-        {timed && (
-          <View style={styles.timeRow}>
-            <Pressable style={styles.timeBtn} onPress={() => setPickerTarget('start')}>
-              <Text style={styles.timeBtnLabel}>시작</Text>
-              <Text style={styles.timeBtnValue}>{startTime ?? '--:--'}</Text>
-            </Pressable>
-            <Pressable style={styles.timeBtn} onPress={() => setPickerTarget('end')}>
-              <Text style={styles.timeBtnLabel}>종료</Text>
-              <Text style={styles.timeBtnValue}>{endTime ?? '미지정'}</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <Pressable style={[styles.saveBtn, { backgroundColor: pointColor }]} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>{initial ? '수정' : '추가'}</Text>
-        </Pressable>
-        </ScrollView>
-        </View>
-      </View>
-
-      <TimePickerModal
-        visible={pickerTarget !== null}
-        title={pickerTarget === 'start' ? '시작 시간' : '종료 시간'}
-        initial={pickerTarget === 'start' ? startTime : endTime}
-        onClose={() => setPickerTarget(null)}
-        onApply={(time) => {
-          if (pickerTarget === 'start') setStartTime(time);
-          else if (pickerTarget === 'end') setEndTime(time);
-          setPickerTarget(null);
-        }}
-      />
-    </Modal>
-  );
-}
-
 // ── 메인 ────────────────────────────────────────────────────────────────────
 
 export default function MissionScreen() {
-  const { date, missions, loadDate, add, update, toggle, remove } = useMissionStore();
+  const { date, missions, loadDate, update, toggle, remove } = useMissionStore();
   const pointColor = usePointColor();
   const categories = useSettingsStore((s) => s.categories);
   const routines = useSettingsStore((s) => s.routines);
@@ -203,12 +41,10 @@ export default function MissionScreen() {
   const setViewMode = useSettingsStore((s) => s.setScheduleViewMode);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const dateDropdownRef = useRef<DateDropdownHandle>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editTarget,   setEditTarget]   = useState<MissionRow | undefined>();
-  const [presetTime,   setPresetTime]   = useState<string | undefined>();
-  const [presetEnd,    setPresetEnd]    = useState<string | undefined>();
-  const [presetCat,    setPresetCat]    = useState<string | undefined>();
   const [pendingRange, setPendingRange] = useState<{ date: string; startTime: string; endTime: string } | null>(null);
+  const [agendaEditor, setAgendaEditor] = useState<AgendaEditorDraft | null>(null);
+  const [agendaOpen, setAgendaOpen] = useState(false);
+  const [bodyHeight, setBodyHeight] = useState(0);
 
   useEffect(() => { loadDate(todayStr()); }, []);
   useEffect(() => {
@@ -265,22 +101,55 @@ export default function MissionScreen() {
     () => navigate(offsetMonth(date, 1)),
   );
 
-  const openAdd = (time?: string, category?: string, endTime?: string) => {
-    setEditTarget(undefined); setPresetTime(time); setPresetEnd(endTime); setPresetCat(category); setModalVisible(true);
+  const openAdd = (time?: string, category?: string, endTime?: string, targetDate = date) => {
+    const startTime = time ?? '09:00';
+    setAgendaEditor({
+      mode: 'add', date: targetDate, title: '', priority: 'medium', category: category ?? '',
+      timed: true, startTime, endTime: endTime ?? minutesToTimeStr(timeToMinutes(startTime) + 30),
+    });
+    setAgendaOpen(true);
   };
   const openEdit = (item: MissionRow) => {
-    setEditTarget(item); setPresetTime(undefined); setPresetEnd(undefined); setPresetCat(undefined); setModalVisible(true);
+    setAgendaEditor({
+      mode: 'edit', itemId: item.id, date: item.date, title: item.title,
+      priority: item.priority, category: item.category, timed: !!item.start_time,
+      startTime: item.start_time ?? '09:00', endTime: item.end_time ?? (item.start_time ? minutesToTimeStr(timeToMinutes(item.start_time) + 30) : '09:30'),
+    });
+    setAgendaOpen(true);
   };
-  const handleSave = (title: string, priority: Priority, category: string, startTime: string | null, endTime: string | null) => {
-    if (editTarget) update(editTarget.id, title, priority, category, startTime, endTime);
-    else add(title, priority, category, startTime, endTime);
+  const isValidTime = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  const handleEditorSave = () => {
+    if (!agendaEditor || !agendaEditor.title.trim()) return;
+    if (agendaEditor.timed && (!isValidTime(agendaEditor.startTime) || !isValidTime(agendaEditor.endTime))) return;
+    const timed = agendaEditor.timed;
+    const startTime = timed ? agendaEditor.startTime : null;
+    const endTime = timed ? agendaEditor.endTime : null;
+    if (timed && timeToMinutes(endTime!) <= timeToMinutes(startTime!)) return;
+    if (agendaEditor.mode === 'edit' && agendaEditor.itemId != null) {
+      update(agendaEditor.itemId, agendaEditor.title.trim(), agendaEditor.priority, agendaEditor.category, startTime, endTime, agendaEditor.date);
+    } else {
+      addMission(agendaEditor.date, agendaEditor.title.trim(), agendaEditor.priority, agendaEditor.category, startTime, endTime);
+      loadDate(agendaEditor.date);
+    }
+    setAgendaEditor(null);
+    setPendingRange(null);
   };
 
-  const [agendaOpen, setAgendaOpen] = useState(false);
-  const [agendaSelected, setAgendaSelected] = useState<MissionRow | null>(null);
+  useEffect(() => {
+    if (!agendaEditor?.timed || !isValidTime(agendaEditor.startTime) || !isValidTime(agendaEditor.endTime)) {
+      setPendingRange(null);
+      return;
+    }
+    if (timeToMinutes(agendaEditor.endTime) <= timeToMinutes(agendaEditor.startTime)) {
+      setPendingRange(null);
+      return;
+    }
+    setPendingRange({ date: agendaEditor.date, startTime: agendaEditor.startTime, endTime: agendaEditor.endTime });
+  }, [agendaEditor]);
 
   const gridRef = useRef<WeekTimeGridHandle>(null);
   const [dragItem, setDragItem] = useState<MissionRow | null>(null);
+  const [dragSource, setDragSource] = useState<'grid' | 'drawer' | null>(null);
   const [dropPreview, setDropPreview] = useState<{ date: string; time: string; durationMin: number } | null>(null);
   const dragDurationRef = useRef(30);
   const dragOffsetRef = useRef(0);
@@ -296,12 +165,13 @@ export default function MissionScreen() {
 
   const handleDragStart = (item: MissionRow, source: 'grid' | 'drawer', x: number, y: number, offsetMinutes = 0) => {
     setDragItem(item);
+    setDragSource(source);
     dragDurationRef.current = durationOf(item);
     dragOffsetRef.current = offsetMinutes;
-    ghostX.setValue(x); ghostY.setValue(y - (offsetMinutes / 60) * 36);
+    if (source === 'drawer') { ghostX.setValue(x); ghostY.setValue(y); }
   };
   const handleDragUpdate = (x: number, y: number) => {
-    ghostX.setValue(x); ghostY.setValue(y - (dragOffsetRef.current / 60) * 36);
+    if (dragSource === 'drawer') { ghostX.setValue(x); ghostY.setValue(y); }
     gridRef.current?.getDropTarget(x, y, (target) => {
       if (!target) { setDropPreview((p) => (p ? null : p)); return; }
       const next = { date: target.date, time: minutesToTimeStr(timeToMinutes(target.time) - dragOffsetRef.current), durationMin: dragDurationRef.current };
@@ -310,6 +180,7 @@ export default function MissionScreen() {
   };
   const handleDragEnd = (item: MissionRow, source: 'grid' | 'drawer', x: number, y: number) => {
     setDragItem(null);
+    setDragSource(null);
     setDropPreview(null);
     const pointerOffset = dragOffsetRef.current;
     dragOffsetRef.current = 0;
@@ -349,15 +220,6 @@ export default function MissionScreen() {
     });
   };
 
-  const handleItemResize = (item: MissionRow, edge: 'start' | 'end', deltaMinutes: number) => {
-    if (!item.start_time) return;
-    const start = timeToMinutes(item.start_time);
-    const end = item.end_time ? timeToMinutes(item.end_time) : start + 30;
-    const nextStart = edge === 'start' ? Math.min(start + deltaMinutes, end - 15) : start;
-    const nextEnd = edge === 'end' ? Math.max(end + deltaMinutes, start + 15) : end;
-    update(item.id, item.title, item.priority, item.category, minutesToTimeStr(nextStart), minutesToTimeStr(nextEnd), item.date);
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* 헤더: 날짜(좌) / 전환·검색·설정(우) — 날짜 쪽만 좌우 스와이프로 이전/다음 이동
@@ -369,7 +231,7 @@ export default function MissionScreen() {
               <DateDropdown
                 ref={dateDropdownRef}
                 date={date}
-                label={viewMode === 'week' ? labelWeek(date) : labelMonth(date)}
+                label={viewMode === 'week' ? labelWeek(weekAnchor) : labelMonth(date)}
                 onApply={navigate}
               />
             </View>
@@ -394,7 +256,7 @@ export default function MissionScreen() {
       </View>
 
       {viewMode === 'month' ? (
-        <View style={styles.body}>
+        <View style={styles.body} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
           <GestureDetector gesture={monthSwipeGesture}>
             <View style={{ flex: 1 }}>
               <MonthCalendar date={date} selectedDate={date} onSelect={navigate} />
@@ -408,15 +270,20 @@ export default function MissionScreen() {
             expanded={agendaOpen}
             onToggle={() => setAgendaOpen((v) => !v)}
             onEditItem={openEdit}
-            selectedItem={agendaSelected}
-            onCloseSelected={() => setAgendaSelected(null)}
             onAdd={(category) => openAdd(undefined, category)}
             onToggleItem={toggle}
             onDeleteItem={remove}
+            editor={agendaEditor}
+            onEditorChange={setAgendaEditor}
+            onEditorSave={handleEditorSave}
+            onEditorCancel={() => { setAgendaEditor(null); setPendingRange(null); }}
+            onEditorDelete={() => { if (agendaEditor?.itemId != null) remove(agendaEditor.itemId); setAgendaEditor(null); setPendingRange(null); }}
+            onQuickAddTodo={(title, category) => { addMission(date, title, 'medium', category, null, null); loadDate(date); }}
+            availableHeight={bodyHeight}
           />
         </View>
       ) : (
-        <View style={styles.body}>
+        <View style={styles.body} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
           <View style={styles.weekBody}>
             <WeekTimeGridView
               key={gridResetKey}
@@ -427,10 +294,9 @@ export default function MissionScreen() {
               onNavigate={(delta) => setWeekAnchor((anchor) => offsetDate(anchor, delta))}
               onCreateRange={(d, start, end) => {
                 loadDate(d);
-                setPendingRange({ date: d, startTime: start, endTime: end });
-                openAdd(start, undefined, end);
+                openAdd(start, undefined, end, d);
               }}
-              onEditItem={(item) => { setAgendaSelected(item); setAgendaOpen(true); }}
+              onEditItem={openEdit}
               pendingRange={pendingRange}
               onItemDragStart={(item, x, y) => handleDragStart(item, 'grid', x, y)}
               onItemDragUpdate={handleDragUpdate}
@@ -447,11 +313,16 @@ export default function MissionScreen() {
             expanded={agendaOpen}
             onToggle={() => setAgendaOpen((v) => !v)}
             onEditItem={openEdit}
-            selectedItem={agendaSelected}
-            onCloseSelected={() => setAgendaSelected(null)}
             onAdd={(category) => openAdd(undefined, category)}
             onToggleItem={toggle}
             onDeleteItem={remove}
+            editor={agendaEditor}
+            onEditorChange={setAgendaEditor}
+            onEditorSave={handleEditorSave}
+            onEditorCancel={() => { setAgendaEditor(null); setPendingRange(null); }}
+            onEditorDelete={() => { if (agendaEditor?.itemId != null) remove(agendaEditor.itemId); setAgendaEditor(null); setPendingRange(null); }}
+            onQuickAddTodo={(title, category) => { addMission(date, title, 'medium', category, null, null); loadDate(date); }}
+            availableHeight={bodyHeight}
             draggable
             onItemDragStart={(item, x, y) => handleDragStart(item, 'drawer', x, y)}
             onItemDragUpdate={handleDragUpdate}
@@ -461,22 +332,11 @@ export default function MissionScreen() {
         </View>
       )}
 
-      {dragItem && (
+      {dragItem && dragSource === 'drawer' && (
         <Animated.View pointerEvents="none" style={[styles.ghost, { left: ghostX, top: ghostY }]}>
           <Text style={styles.ghostText} numberOfLines={1}>{dragItem.title}</Text>
         </Animated.View>
       )}
-
-      <AddEditModal
-        visible={modalVisible}
-        initial={editTarget}
-        presetStartTime={presetTime}
-        presetEndTime={presetEnd}
-        presetCategory={presetCat}
-        categories={categories}
-        onClose={() => { setModalVisible(false); setPendingRange(null); }}
-        onSave={handleSave}
-      />
 
       <Modal visible={settingsVisible} animationType="slide" onRequestClose={() => setSettingsVisible(false)}>
         <SettingsScreen onClose={() => setSettingsVisible(false)} />
@@ -521,65 +381,4 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   ghostText: { fontSize: 11, fontWeight: '600', color: Colors.textPrimary },
-
-  overlay: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  sheetCard: {
-    width: '100%', maxWidth: 420, maxHeight: '86%',
-    backgroundColor: Colors.background,
-    borderRadius: 26, borderWidth: 1, borderColor: Colors.border,
-    overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.18, shadowRadius: 36,
-    elevation: 20,
-  },
-  sheet: { padding: 24, gap: 14 },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary },
-  input: {
-    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12,
-    fontSize: 16, color: Colors.textPrimary,
-  },
-  secLabel: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
-  priorityRow: { flexDirection: 'row', gap: 8 },
-  priorityBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.border,
-  },
-  priorityDot: { width: 9, height: 9, borderRadius: 5 },
-  priorityBtnText: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary },
-  catScroll: { maxHeight: 44 },
-  catContent: { gap: 8, alignItems: 'center' },
-  catChip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface,
-  },
-  catChipText: { fontSize: 13, fontWeight: '500', color: Colors.textSecondary },
-  catChipTextActive: { color: '#fff' },
-  customCatInput: {
-    borderWidth: 1.5, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 14, color: Colors.textPrimary,
-  },
-  saveBtn: {
-    borderRadius: 14,
-    paddingVertical: 14, alignItems: 'center',
-  },
-  saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-
-  timedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  timedSwitch: {
-    width: 44, height: 26, borderRadius: 13, backgroundColor: Colors.border,
-    padding: 3, justifyContent: 'center',
-  },
-  timedKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
-  timedKnobActive: { transform: [{ translateX: 18 }] },
-  timeRow: { flexDirection: 'row', gap: 8 },
-  timeBtn: {
-    flex: 1, borderWidth: 1.5, borderColor: Colors.border, borderRadius: 12,
-    paddingVertical: 10, paddingHorizontal: 12, gap: 2,
-  },
-  timeBtnLabel: { fontSize: 12, color: Colors.textMuted, fontWeight: '600' },
-  timeBtnValue: { fontSize: 16, color: Colors.textPrimary, fontWeight: '700' },
 });

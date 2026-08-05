@@ -8,7 +8,7 @@ import {
 } from '../components/icons';
 import { Divider, SettingRow, ComingSoonSub, styles as s } from '../components/SettingsUI';
 
-const APP_VERSION = '1.10.1';
+const APP_VERSION = '1.11.0';
 
 type SubScreenKey = 'notification' | 'lock' | 'backup' | 'export';
 
