@@ -22,7 +22,6 @@ function useStableMobileViewportHeight() {
     return Math.round(window.visualViewport?.height ?? window.innerHeight);
   };
   const [height, setHeight] = useState<number | undefined>(getViewportHeight);
-  const stableHeightRef = useRef(height ?? 0);
   const viewportWidthRef = useRef(
     Platform.OS === 'web' && typeof window !== 'undefined'
       ? Math.round(window.visualViewport?.width ?? window.innerWidth)
@@ -32,31 +31,40 @@ function useStableMobileViewportHeight() {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const viewport = window.visualViewport;
-    const syncViewport = () => {
-      const nextHeight = Math.round(viewport?.height ?? window.innerHeight);
+    const syncOrientation = () => {
       const nextWidth = Math.round(viewport?.width ?? window.innerWidth);
-      const orientationChanged = Math.abs(nextWidth - viewportWidthRef.current) > 80;
-      const keyboardLikelyOpen =
-        !orientationChanged &&
-        stableHeightRef.current > 0 &&
-        nextHeight < stableHeightRef.current * 0.78;
-
-      // 키보드 때문에 줄어든 높이는 무시하되 화면 회전·주소창 변화는 실제 크기로 반영한다.
-      if (!keyboardLikelyOpen) {
+      if (Math.abs(nextWidth - viewportWidthRef.current) > 80) {
         viewportWidthRef.current = nextWidth;
-        stableHeightRef.current = nextHeight;
-        setHeight(nextHeight);
+        setHeight(Math.round(viewport?.height ?? window.innerHeight));
       }
     };
 
-    syncViewport();
-    viewport?.addEventListener('resize', syncViewport);
-    window.addEventListener('resize', syncViewport);
-    window.addEventListener('orientationchange', syncViewport);
+    const root = document.documentElement;
+    const body = document.body;
+    const previous = {
+      rootOverflow: root.style.overflow,
+      rootHeight: root.style.height,
+      bodyOverflow: body.style.overflow,
+      bodyHeight: body.style.height,
+      bodyPosition: body.style.position,
+      bodyWidth: body.style.width,
+    };
+    root.style.overflow = 'hidden';
+    root.style.height = '100%';
+    body.style.overflow = 'hidden';
+    body.style.height = '100%';
+    body.style.position = 'fixed';
+    body.style.width = '100%';
+
+    window.addEventListener('orientationchange', syncOrientation);
     return () => {
-      viewport?.removeEventListener('resize', syncViewport);
-      window.removeEventListener('resize', syncViewport);
-      window.removeEventListener('orientationchange', syncViewport);
+      window.removeEventListener('orientationchange', syncOrientation);
+      root.style.overflow = previous.rootOverflow;
+      root.style.height = previous.rootHeight;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.height = previous.bodyHeight;
+      body.style.position = previous.bodyPosition;
+      body.style.width = previous.bodyWidth;
     };
   }, []);
 
@@ -140,9 +148,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   mobileShell: {
-    flex: 1,
+    flex: 0,
+    width: '100%',
     backgroundColor: Colors.background,
-    height: '100dvh' as any,
+    overflow: 'hidden',
   },
   desktopShell: {
     flex: 1,

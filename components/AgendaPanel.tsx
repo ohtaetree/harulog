@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, Dimensions, Easing, TextInput, Keyboard, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, Dimensions, TextInput, Keyboard, Platform } from 'react-native';
 import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
@@ -154,16 +154,23 @@ export default function AgendaPanel({
   availableHeight,
 }: Props) {
   const pointColor = usePointColor();
-  const anim = useRef(new Animated.Value(expanded ? 1 : 0)).current;
   const screenHeight = Dimensions.get('window').height;
   const fullHeight = availableHeight || screenHeight;
   const expandedHeight = Math.min(screenHeight * PANEL_HEIGHT_RATIO, fullHeight);
+  const panelHeight = useRef(new Animated.Value(expanded ? expandedHeight : HANDLE_HEIGHT)).current;
+  const currentHeightRef = useRef(expanded ? expandedHeight : HANDLE_HEIGHT);
+  const dragStartHeightRef = useRef(currentHeightRef.current);
   const [full, setFull] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const viewportHeightRef = useRef(0);
   const [inlineCategory, setInlineCategory] = useState<string | null>(null);
   const [inlineTitle, setInlineTitle] = useState('');
-  const isFullscreen = full || (keyboardVisible && !!editor);
+  const isFullscreen = full || !!editor || keyboardVisible;
+
+  useEffect(() => {
+    const id = panelHeight.addListener(({ value }) => { currentHeightRef.current = value; });
+    return () => panelHeight.removeListener(id);
+  }, [panelHeight]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
@@ -174,13 +181,10 @@ export default function AgendaPanel({
 
     const viewport = typeof window !== 'undefined' ? window.visualViewport : undefined;
     if (!viewport) return;
-    viewportHeightRef.current = Math.max(window.innerHeight, viewport.height);
+    viewportHeightRef.current = viewport.height;
     const syncKeyboard = () => {
       const baseline = viewportHeightRef.current;
-      const nextVisible = viewport.height < baseline * 0.78;
-      if (!nextVisible && viewport.height > baseline * 0.9) {
-        viewportHeightRef.current = Math.max(window.innerHeight, viewport.height);
-      }
+      const nextVisible = viewport.height < baseline - 100;
       setKeyboardVisible(nextVisible);
     };
     viewport.addEventListener('resize', syncKeyboard);
@@ -189,15 +193,16 @@ export default function AgendaPanel({
   }, []);
 
   useEffect(() => {
-    const target = isFullscreen ? 2 : expanded ? 1 : 0;
-    anim.stopAnimation();
-    Animated.timing(anim, {
+    const target = isFullscreen ? fullHeight : expanded ? expandedHeight : HANDLE_HEIGHT;
+    Animated.spring(panelHeight, {
       toValue: target,
-      duration: isFullscreen ? (keyboardVisible ? 260 : 520) : 390,
-      easing: Easing.bezier(0.22, 0.72, 0.2, 1),
+      damping: 30,
+      stiffness: 230,
+      mass: 1,
+      overshootClamping: false,
       useNativeDriver: false,
     }).start();
-  }, [expanded, isFullscreen, keyboardVisible]);
+  }, [expanded, expandedHeight, fullHeight, isFullscreen, keyboardVisible, panelHeight]);
 
   useEffect(() => {
     if (!expanded) setFull(false);
@@ -209,30 +214,67 @@ export default function AgendaPanel({
   const untimed = useMemo(() => missions.filter((m) => !m.start_time), [missions]);
   const sections = useMemo(() => buildCategorySections(untimed, categories), [untimed, categories]);
 
-  const tapGesture = Gesture.Tap().maxDuration(240).onEnd(() => onToggle());
+  const applySnapState = (target: number) => {
+    const shouldExpand = target > HANDLE_HEIGHT + 1;
+    if (shouldExpand !== expanded) onToggle();
+    setFull(target >= fullHeight - 1);
+  };
+  const snapPanel = (target: number, velocityY = 0) => {
+    applySnapState(target);
+    Animated.spring(panelHeight, {
+      toValue: target,
+      velocity: -velocityY / 1000,
+      damping: 28,
+      stiffness: 210,
+      mass: 1,
+      overshootClamping: false,
+      useNativeDriver: false,
+    }).start();
+  };
+  const tapGesture = Gesture.Tap().maxDuration(240).onEnd(() => {
+    const current = currentHeightRef.current;
+    snapPanel(current < (HANDLE_HEIGHT + expandedHeight) / 2 ? expandedHeight : HANDLE_HEIGHT);
+  }).runOnJS(true);
   const swipeGesture = Gesture.Pan()
+    .onBegin(() => {
+      panelHeight.stopAnimation((value) => {
+        dragStartHeightRef.current = value;
+        currentHeightRef.current = value;
+      });
+    })
+    .onUpdate((e) => {
+      const next = Math.max(HANDLE_HEIGHT, Math.min(fullHeight, dragStartHeightRef.current - e.translationY));
+      panelHeight.setValue(next);
+    })
     .onEnd((e) => {
-      if (!expanded && e.translationY < -20) onToggle();
-      else if (expanded && !full && e.translationY < -20) setFull(true);
-      else if (full && e.translationY > 20) setFull(false);
-      else if (expanded && e.translationY > 20) onToggle();
-    });
+      const projected = Math.max(HANDLE_HEIGHT, Math.min(fullHeight, currentHeightRef.current - e.velocityY * 0.16));
+      const lowerMid = (HANDLE_HEIGHT + expandedHeight) / 2;
+      const upperMid = (expandedHeight + fullHeight) / 2;
+      const target = projected < lowerMid ? HANDLE_HEIGHT : projected < upperMid ? expandedHeight : fullHeight;
+      snapPanel(target, e.velocityY);
+    })
+    .runOnJS(true);
   const handleGesture = Gesture.Race(tapGesture, swipeGesture);
 
-  const height = anim.interpolate({ inputRange: [0, 1, 2], outputRange: [HANDLE_HEIGHT, expandedHeight, fullHeight] });
+  const backdropOpacity = panelHeight.interpolate({
+    inputRange: [expandedHeight, fullHeight], outputRange: [0, 0.56], extrapolate: 'clamp',
+  });
+  const cornerRadius = panelHeight.interpolate({
+    inputRange: [HANDLE_HEIGHT, expandedHeight], outputRange: [0, 26], extrapolate: 'clamp',
+  });
 
   return (
     <>
-      {isFullscreen && <View pointerEvents="none" style={styles.backdrop} />}
-      <Animated.View style={[styles.panel, isFullscreen && styles.panelFullscreen, { height }]}>
-      <View style={styles.handleArea}>
+      <Animated.View pointerEvents="none" style={[styles.backdrop, { opacity: backdropOpacity }]} />
+      <Animated.View style={[styles.panel, { height: panelHeight, borderTopLeftRadius: cornerRadius, borderTopRightRadius: cornerRadius }]}>
+      <View style={[styles.handleArea, editor && styles.editorHandleArea]}>
         <GestureDetector gesture={handleGesture}>
           <View style={styles.handleGestureZone}>
           <View style={styles.handleBar} />
-            <Text style={styles.handleLabel}>{missions.length === 0 ? '예정된 일정 없음' : '일정'}</Text>
+            {!editor && <Text style={styles.handleLabel}>{missions.length === 0 ? '예정된 일정 없음' : '일정'}</Text>}
           </View>
         </GestureDetector>
-        <Pressable onPress={() => onAdd()} style={styles.handleAdd}><IconPlus size={20} color={Colors.textSecondary} /></Pressable>
+        {!editor && <Pressable onPress={() => onAdd()} style={styles.handleAdd}><IconPlus size={20} color={Colors.textSecondary} /></Pressable>}
       </View>
 
       {editor ? (
@@ -258,6 +300,7 @@ export default function AgendaPanel({
         {sections.map((section) => (
           <View key={section.key} style={styles.catSection}>
             <CategoryHeader label={section.label} onAdd={section.addable ? () => {
+              setFull(true);
               setInlineCategory((current) => current === section.key ? null : section.key);
               setInlineTitle('');
             } : undefined} />
@@ -284,7 +327,6 @@ export default function AgendaPanel({
                   placeholder="할 일 입력"
                   placeholderTextColor={Colors.textMuted}
                   style={[styles.inlineInput, { borderBottomColor: pointColor }]}
-                  autoFocus
                   maxLength={60}
                   returnKeyType="done"
                   onSubmitEditing={() => {
@@ -327,25 +369,19 @@ function AgendaEditor({ draft, categories, onChange, onSave, onCancel, onDelete 
   return (
     <ScrollView style={styles.editorScroll} contentContainerStyle={styles.editor} keyboardShouldPersistTaps="handled">
       <View style={styles.editorHeader}>
-        <View>
-          <Text style={styles.editorEyebrow}>{draft.mode === 'edit' ? '일정 수정' : '새 일정'}</Text>
-          <Text style={styles.editorDate}>{draft.date.replaceAll('-', '.')}</Text>
-        </View>
+        <Text style={styles.editorEyebrow}>이벤트</Text>
         <View style={styles.editorHeaderActions}>
-          <Pressable style={styles.editorClose} onPress={onCancel}><IconClose size={19} color={Colors.textPrimary} /></Pressable>
-          <Pressable style={[styles.editorDone, { backgroundColor: pointColor }, saveDisabled && styles.editorSaveDisabled]} disabled={saveDisabled} onPress={onSave}>
-            <Text style={styles.editorDoneText}>완료</Text>
-          </Pressable>
+          {draft.mode === 'edit' && <Text style={styles.editorMore}>•••</Text>}
+          <Pressable style={styles.editorClose} onPress={onCancel}><IconClose size={22} color={Colors.textPrimary} /></Pressable>
         </View>
       </View>
 
       <TextInput
         value={draft.title}
         onChangeText={(title) => patch({ title })}
-        placeholder="일정 이름"
+        placeholder="제목"
         placeholderTextColor={Colors.textMuted}
         style={styles.editorTitleInput}
-        autoFocus={draft.mode === 'add'}
         maxLength={60}
       />
 
@@ -364,6 +400,8 @@ function AgendaEditor({ draft, categories, onChange, onSave, onCancel, onDelete 
       </View>}
       {!timeValid && <Text style={styles.editorError}>시간은 HH:MM 형식으로 입력하고 종료 시간을 시작 이후로 설정해 주세요.</Text>}
 
+      <Text style={styles.editorDate}>{draft.date.replaceAll('-', '.')}</Text>
+
       <Text style={styles.editorLabel}>카테고리</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editorChips}>
         {['', ...categories].map((category) => {
@@ -380,6 +418,10 @@ function AgendaEditor({ draft, categories, onChange, onSave, onCancel, onDelete 
         })}
       </View>
 
+      <Pressable style={[styles.editorDone, { backgroundColor: pointColor }, saveDisabled && styles.editorSaveDisabled]} disabled={saveDisabled} onPress={onSave}>
+        <Text style={styles.editorDoneText}>{draft.mode === 'edit' ? '수정 완료' : '일정 추가'}</Text>
+      </Pressable>
+
       {draft.mode === 'edit' && onDelete && <Pressable style={styles.editorDelete} onPress={onDelete}><Text style={styles.editorDeleteText}>일정 삭제</Text></Pressable>}
     </ScrollView>
   );
@@ -387,25 +429,26 @@ function AgendaEditor({ draft, categories, onChange, onSave, onCancel, onDelete 
 
 const styles = StyleSheet.create({
   panel: {
-    backgroundColor: Colors.background,
+    backgroundColor: '#fff',
     borderTopWidth: 1, borderTopColor: Colors.border,
     overflow: 'hidden',
+    zIndex: 4,
+    elevation: 12,
   },
-  panelFullscreen: { zIndex: 4, elevation: 12 },
   backdrop: { position: 'absolute', top: -200, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.56)', zIndex: 3 },
   handleArea: {
     height: HANDLE_HEIGHT, justifyContent: 'center',
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
-  handleGestureZone: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 16, paddingTop: 6 },
+  editorHandleArea: { height: 24 },
+  handleGestureZone: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 8 },
   handleBar: {
     position: 'absolute', top: 6, left: '50%', marginLeft: -18,
-    width: 36, height: 4, borderRadius: 2,
+    width: 40, height: 5, borderRadius: 3,
     backgroundColor: Colors.border,
   },
-  handleLabel: { fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
-  handleAdd: { position: 'absolute', right: 16, top: 8, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface },
+  handleLabel: { fontSize: 14, fontWeight: '600', color: Colors.textSecondary },
+  handleAdd: { position: 'absolute', right: 18, top: 8, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F1F3' },
 
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, gap: 2 },
@@ -461,15 +504,16 @@ const styles = StyleSheet.create({
   inlineTodoBadge: { width: 22, height: 22, borderRadius: 6, backgroundColor: Colors.border },
   inlineInput: { flex: 1, minHeight: 38, borderBottomWidth: 2, paddingHorizontal: 1, paddingVertical: 4, fontSize: 15, color: Colors.textPrimary, backgroundColor: Colors.background },
   editorScroll: { flex: 1 },
-  editor: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 28, gap: 13 },
+  editor: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 34, gap: 20 },
   editorHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  editorHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  editorEyebrow: { fontSize: 16, fontWeight: '800', color: Colors.textPrimary },
-  editorDate: { marginTop: 3, fontSize: 12, color: Colors.textMuted },
-  editorClose: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  editorDone: { minWidth: 58, height: 34, borderRadius: 11, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
-  editorDoneText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  editorTitleInput: { minHeight: 48, borderBottomWidth: 1, borderBottomColor: Colors.border, fontSize: 20, fontWeight: '700', color: Colors.textPrimary, paddingVertical: 8 },
+  editorHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  editorEyebrow: { fontSize: 16, fontWeight: '600', color: Colors.textSecondary },
+  editorMore: { fontSize: 18, fontWeight: '900', letterSpacing: 2, color: Colors.textPrimary },
+  editorDate: { fontSize: 16, fontWeight: '600', color: Colors.textPrimary, paddingLeft: 76 },
+  editorClose: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F1F3' },
+  editorDone: { height: 48, borderRadius: 14, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  editorDoneText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  editorTitleInput: { minHeight: 70, borderBottomWidth: 1, borderBottomColor: Colors.border, fontSize: 25, fontWeight: '500', color: Colors.textPrimary, paddingVertical: 12 },
   editorLabel: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
   editorSwitchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   editorSwitch: { width: 44, height: 26, borderRadius: 13, backgroundColor: Colors.border, padding: 3 },
