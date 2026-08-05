@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, Dimensions, Easing, TextInput } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, Dimensions, Easing, TextInput, Keyboard, Platform } from 'react-native';
 import { ScrollView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors } from '../constants/colors';
 import { usePointColor } from '../hooks/usePointColor';
@@ -44,7 +44,7 @@ function buildCategorySections(missions: MissionRow[], categories: string[]): Ca
 
   const uncategorized = byCat.get('__uncategorized__');
   if (uncategorized?.length) {
-    sections.push({ key: '__uncategorized__', label: '미분류', data: uncategorized, addable: false });
+    sections.push({ key: '__uncategorized__', label: '미분류', data: uncategorized, addable: true });
   }
 
   return sections.filter((s) => s.data.length > 0);
@@ -159,19 +159,45 @@ export default function AgendaPanel({
   const fullHeight = availableHeight || screenHeight;
   const expandedHeight = Math.min(screenHeight * PANEL_HEIGHT_RATIO, fullHeight);
   const [full, setFull] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const viewportHeightRef = useRef(0);
   const [inlineCategory, setInlineCategory] = useState<string | null>(null);
   const [inlineTitle, setInlineTitle] = useState('');
+  const isFullscreen = full || (keyboardVisible && !!editor);
 
   useEffect(() => {
-    const target = full ? 2 : expanded ? 1 : 0;
+    if (Platform.OS !== 'web') {
+      const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardVisible(true));
+      const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardVisible(false));
+      return () => { show.remove(); hide.remove(); };
+    }
+
+    const viewport = typeof window !== 'undefined' ? window.visualViewport : undefined;
+    if (!viewport) return;
+    viewportHeightRef.current = Math.max(window.innerHeight, viewport.height);
+    const syncKeyboard = () => {
+      const baseline = viewportHeightRef.current;
+      const nextVisible = viewport.height < baseline * 0.78;
+      if (!nextVisible && viewport.height > baseline * 0.9) {
+        viewportHeightRef.current = Math.max(window.innerHeight, viewport.height);
+      }
+      setKeyboardVisible(nextVisible);
+    };
+    viewport.addEventListener('resize', syncKeyboard);
+    syncKeyboard();
+    return () => viewport.removeEventListener('resize', syncKeyboard);
+  }, []);
+
+  useEffect(() => {
+    const target = isFullscreen ? 2 : expanded ? 1 : 0;
     anim.stopAnimation();
     Animated.timing(anim, {
       toValue: target,
-      duration: full ? 520 : 390,
+      duration: isFullscreen ? (keyboardVisible ? 260 : 520) : 390,
       easing: Easing.bezier(0.22, 0.72, 0.2, 1),
       useNativeDriver: false,
     }).start();
-  }, [expanded, full]);
+  }, [expanded, isFullscreen, keyboardVisible]);
 
   useEffect(() => {
     if (!expanded) setFull(false);
@@ -196,7 +222,9 @@ export default function AgendaPanel({
   const height = anim.interpolate({ inputRange: [0, 1, 2], outputRange: [HANDLE_HEIGHT, expandedHeight, fullHeight] });
 
   return (
-    <Animated.View style={[styles.panel, { height }]}>
+    <>
+      {isFullscreen && <View pointerEvents="none" style={styles.backdrop} />}
+      <Animated.View style={[styles.panel, isFullscreen && styles.panelFullscreen, { height }]}>
       <View style={styles.handleArea}>
         <GestureDetector gesture={handleGesture}>
           <View style={styles.handleGestureZone}>
@@ -233,35 +261,6 @@ export default function AgendaPanel({
               setInlineCategory((current) => current === section.key ? null : section.key);
               setInlineTitle('');
             } : undefined} />
-            {inlineCategory === section.key && (
-              <View style={styles.inlineAddRow}>
-                <TextInput
-                  value={inlineTitle}
-                  onChangeText={setInlineTitle}
-                  placeholder={`${section.label} 할 일 입력`}
-                  placeholderTextColor={Colors.textMuted}
-                  style={styles.inlineInput}
-                  autoFocus
-                  maxLength={60}
-                  returnKeyType="done"
-                  onSubmitEditing={() => {
-                    const title = inlineTitle.trim();
-                    if (!title) return;
-                    onQuickAddTodo?.(title, section.key);
-                    setInlineTitle('');
-                    setInlineCategory(null);
-                  }}
-                />
-                <Pressable style={[styles.inlineSave, { backgroundColor: pointColor }]} onPress={() => {
-                  const title = inlineTitle.trim();
-                  if (!title) return;
-                  onQuickAddTodo?.(title, section.key);
-                  setInlineTitle('');
-                  setInlineCategory(null);
-                }}><IconCheck size={14} color="#fff" /></Pressable>
-                <Pressable style={styles.inlineCancel} onPress={() => setInlineCategory(null)}><IconClose size={14} color={Colors.textMuted} /></Pressable>
-              </View>
-            )}
             {section.data.map((item) => (
               <TodoRow
                 key={item.id}
@@ -276,6 +275,28 @@ export default function AgendaPanel({
                 onDragEnd={onItemDragEnd}
               />
             ))}
+            {inlineCategory === section.key && (
+              <View style={styles.inlineAddRow}>
+                <View style={styles.inlineTodoBadge} />
+                <TextInput
+                  value={inlineTitle}
+                  onChangeText={setInlineTitle}
+                  placeholder="할 일 입력"
+                  placeholderTextColor={Colors.textMuted}
+                  style={[styles.inlineInput, { borderBottomColor: pointColor }]}
+                  autoFocus
+                  maxLength={60}
+                  returnKeyType="done"
+                  onSubmitEditing={() => {
+                    const title = inlineTitle.trim();
+                    if (!title) return;
+                    onQuickAddTodo?.(title, section.key === '__uncategorized__' ? '' : section.key);
+                    setInlineTitle('');
+                    setInlineCategory(null);
+                  }}
+                />
+              </View>
+            )}
           </View>
         ))}
 
@@ -284,7 +305,8 @@ export default function AgendaPanel({
         )}
       </ScrollView>}
 
-    </Animated.View>
+      </Animated.View>
+    </>
   );
 }
 
@@ -309,7 +331,12 @@ function AgendaEditor({ draft, categories, onChange, onSave, onCancel, onDelete 
           <Text style={styles.editorEyebrow}>{draft.mode === 'edit' ? '일정 수정' : '새 일정'}</Text>
           <Text style={styles.editorDate}>{draft.date.replaceAll('-', '.')}</Text>
         </View>
-        <Pressable style={styles.editorClose} onPress={onCancel}><IconClose size={19} color={Colors.textPrimary} /></Pressable>
+        <View style={styles.editorHeaderActions}>
+          <Pressable style={styles.editorClose} onPress={onCancel}><IconClose size={19} color={Colors.textPrimary} /></Pressable>
+          <Pressable style={[styles.editorDone, { backgroundColor: pointColor }, saveDisabled && styles.editorSaveDisabled]} disabled={saveDisabled} onPress={onSave}>
+            <Text style={styles.editorDoneText}>완료</Text>
+          </Pressable>
+        </View>
       </View>
 
       <TextInput
@@ -353,12 +380,7 @@ function AgendaEditor({ draft, categories, onChange, onSave, onCancel, onDelete 
         })}
       </View>
 
-      <View style={styles.editorActionRow}>
-        {draft.mode === 'edit' && onDelete && <Pressable style={styles.editorDelete} onPress={onDelete}><Text style={styles.editorDeleteText}>삭제</Text></Pressable>}
-        <Pressable style={[styles.editorSave, { backgroundColor: pointColor }, saveDisabled && styles.editorSaveDisabled]} disabled={saveDisabled} onPress={onSave}>
-          <Text style={styles.editorSaveText}>{draft.mode === 'edit' ? '수정 완료' : '일정 추가'}</Text>
-        </Pressable>
-      </View>
+      {draft.mode === 'edit' && onDelete && <Pressable style={styles.editorDelete} onPress={onDelete}><Text style={styles.editorDeleteText}>일정 삭제</Text></Pressable>}
     </ScrollView>
   );
 }
@@ -369,6 +391,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: Colors.border,
     overflow: 'hidden',
   },
+  panelFullscreen: { zIndex: 4, elevation: 12 },
+  backdrop: { position: 'absolute', top: -200, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.56)', zIndex: 3 },
   handleArea: {
     height: HANDLE_HEIGHT, justifyContent: 'center',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
@@ -433,16 +457,18 @@ const styles = StyleSheet.create({
 
   empty: { fontSize: 12, color: Colors.textMuted, textAlign: 'center', paddingTop: 24 },
 
-  inlineAddRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingLeft: 2, paddingBottom: 4 },
-  inlineInput: { flex: 1, minHeight: 38, borderWidth: 1, borderColor: Colors.border, borderRadius: 10, paddingHorizontal: 11, fontSize: 13, color: Colors.textPrimary, backgroundColor: Colors.background },
-  inlineSave: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  inlineCancel: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
+  inlineAddRow: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingLeft: 2, paddingBottom: 5 },
+  inlineTodoBadge: { width: 22, height: 22, borderRadius: 6, backgroundColor: Colors.border },
+  inlineInput: { flex: 1, minHeight: 38, borderBottomWidth: 2, paddingHorizontal: 1, paddingVertical: 4, fontSize: 15, color: Colors.textPrimary, backgroundColor: Colors.background },
   editorScroll: { flex: 1 },
   editor: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 28, gap: 13 },
   editorHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  editorHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   editorEyebrow: { fontSize: 16, fontWeight: '800', color: Colors.textPrimary },
   editorDate: { marginTop: 3, fontSize: 12, color: Colors.textMuted },
   editorClose: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  editorDone: { minWidth: 58, height: 34, borderRadius: 11, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+  editorDoneText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   editorTitleInput: { minHeight: 48, borderBottomWidth: 1, borderBottomColor: Colors.border, fontSize: 20, fontWeight: '700', color: Colors.textPrimary, paddingVertical: 8 },
   editorLabel: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
   editorSwitchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -462,10 +488,7 @@ const styles = StyleSheet.create({
   editorPriorityRow: { flexDirection: 'row', gap: 7 },
   editorPriority: { flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
   editorPriorityText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
-  editorActionRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
-  editorDelete: { paddingHorizontal: 18, paddingVertical: 13, borderRadius: 13, alignItems: 'center', backgroundColor: '#FFF0F0' },
+  editorDelete: { marginTop: 8, paddingHorizontal: 18, paddingVertical: 13, borderRadius: 13, alignItems: 'center', backgroundColor: '#FFF0F0' },
   editorDeleteText: { color: '#D33', fontSize: 14, fontWeight: '800' },
-  editorSave: { flex: 1, paddingVertical: 13, borderRadius: 13, alignItems: 'center' },
   editorSaveDisabled: { opacity: 0.4 },
-  editorSaveText: { color: '#fff', fontSize: 14, fontWeight: '800' },
 });

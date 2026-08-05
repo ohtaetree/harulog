@@ -554,7 +554,7 @@ function ScheduledBlock({ item, top, height, color, done, past, dragging, onEdit
     .activateAfterLongPress(260)
     .onStart((e) => {
       onGestureActive(true);
-      onDragStart(item, e.absoluteX, e.absoluteY, Math.max(0, Math.round((e.y / HOUR_HEIGHT) * 4) * 15));
+      onDragStart(item, e.absoluteX, e.absoluteY);
     })
     .onUpdate((e) => onDragUpdate(e.absoluteX, e.absoluteY))
     .onFinalize((e, success) => {

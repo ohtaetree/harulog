@@ -153,6 +153,7 @@ export default function MissionScreen() {
   const [dropPreview, setDropPreview] = useState<{ date: string; time: string; durationMin: number } | null>(null);
   const dragDurationRef = useRef(30);
   const dragOffsetRef = useRef(0);
+  const activeDragIdRef = useRef<number | null>(null);
   const ghostX = useRef(new Animated.Value(-1000)).current;
   const ghostY = useRef(new Animated.Value(-1000)).current;
 
@@ -166,8 +167,17 @@ export default function MissionScreen() {
   const handleDragStart = (item: MissionRow, source: 'grid' | 'drawer', x: number, y: number, offsetMinutes = 0) => {
     setDragItem(item);
     setDragSource(source);
+    activeDragIdRef.current = item.id;
     dragDurationRef.current = durationOf(item);
-    dragOffsetRef.current = offsetMinutes;
+    dragOffsetRef.current = source === 'grid' ? 0 : offsetMinutes;
+    if (source === 'grid' && item.start_time) {
+      // 제스처 이벤트의 e.y는 일부 기기에서 0으로 보고되어 미리보기 상단이 손가락에 붙었다.
+      // 실제 그리드 좌표에서 원래 시작 시각과의 차이를 계산해, 어디를 눌러도 블록의 상대 위치를 유지한다.
+      gridRef.current?.getDropTarget(x, y, (target) => {
+        if (!target || activeDragIdRef.current !== item.id) return;
+        dragOffsetRef.current = Math.max(0, timeToMinutes(target.time) - timeToMinutes(item.start_time!));
+      });
+    }
     if (source === 'drawer') { ghostX.setValue(x); ghostY.setValue(y); }
   };
   const handleDragUpdate = (x: number, y: number) => {
@@ -181,6 +191,7 @@ export default function MissionScreen() {
   const handleDragEnd = (item: MissionRow, source: 'grid' | 'drawer', x: number, y: number) => {
     setDragItem(null);
     setDragSource(null);
+    activeDragIdRef.current = null;
     setDropPreview(null);
     const pointerOffset = dragOffsetRef.current;
     dragOffsetRef.current = 0;
@@ -352,7 +363,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  body: { flex: 1 },
+  body: { flex: 1, position: 'relative' },
   viewToggle: {
     paddingHorizontal: 13, paddingVertical: 7,
     borderRadius: 16, backgroundColor: Colors.surface,

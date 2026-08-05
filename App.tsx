@@ -86,7 +86,10 @@ const styles = StyleSheet.create({
   mobileShell: {
     flex: 1,
     backgroundColor: Colors.background,
-    height: '100dvh' as any,
+    // iOS PWA에서 100dvh는 키보드가 열릴 때마다 줄어들어 탭바까지 화면 위로 밀어 올린다.
+    // 레이아웃 뷰포트 높이를 고정해 키보드가 앱 위에 올라오도록 유지한다.
+    height: '100vh' as any,
+    minHeight: '100vh' as any,
   },
   desktopShell: {
     flex: 1,
