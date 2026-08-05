@@ -46,6 +46,11 @@ export default function MissionScreen() {
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [bodyHeight, setBodyHeight] = useState(0);
 
+  useEffect(() => {
+    if (viewMode !== 'month' || agendaEditor) return;
+    setAgendaOpen(missions.length > 0);
+  }, [viewMode, date, missions.length, agendaEditor]);
+
   useEffect(() => { loadDate(todayStr()); }, []);
   useEffect(() => {
     const day = new Date(date + 'T00:00:00');
