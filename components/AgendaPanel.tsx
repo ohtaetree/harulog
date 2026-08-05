@@ -259,13 +259,18 @@ export default function AgendaPanel({
   const backdropOpacity = panelHeight.interpolate({
     inputRange: [expandedHeight, fullHeight], outputRange: [0, 0.56], extrapolate: 'clamp',
   });
+  const layoutHeight = panelHeight.interpolate({
+    inputRange: [HANDLE_HEIGHT, expandedHeight, fullHeight],
+    outputRange: [HANDLE_HEIGHT, expandedHeight, expandedHeight],
+    extrapolate: 'clamp',
+  });
   const cornerRadius = panelHeight.interpolate({
     inputRange: [HANDLE_HEIGHT, expandedHeight], outputRange: [0, 26], extrapolate: 'clamp',
   });
 
   return (
-    <>
-      <Animated.View pointerEvents="none" style={[styles.backdrop, { opacity: backdropOpacity }]} />
+    <Animated.View style={[styles.panelHost, { height: layoutHeight }]}>
+      <Animated.View pointerEvents="none" style={[styles.backdrop, { height: fullHeight, opacity: backdropOpacity }]} />
       <Animated.View style={[styles.panel, { height: panelHeight, borderTopLeftRadius: cornerRadius, borderTopRightRadius: cornerRadius }]}>
       <View style={[styles.handleArea, editor && styles.editorHandleArea]}>
         <GestureDetector gesture={handleGesture}>
@@ -348,7 +353,7 @@ export default function AgendaPanel({
       </ScrollView>}
 
       </Animated.View>
-    </>
+    </Animated.View>
   );
 }
 
@@ -428,14 +433,23 @@ function AgendaEditor({ draft, categories, onChange, onSave, onCancel, onDelete 
 }
 
 const styles = StyleSheet.create({
+  panelHost: {
+    position: 'relative',
+    zIndex: 4,
+    overflow: 'visible',
+  },
   panel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: '#fff',
     borderTopWidth: 1, borderTopColor: Colors.border,
     overflow: 'hidden',
     zIndex: 4,
     elevation: 12,
   },
-  backdrop: { position: 'absolute', top: -200, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.56)', zIndex: 3 },
+  backdrop: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.56)', zIndex: 3 },
   handleArea: {
     height: HANDLE_HEIGHT, justifyContent: 'center',
     paddingHorizontal: 20,
